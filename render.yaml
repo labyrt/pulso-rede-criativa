@@ -2,9 +2,12 @@ services:
   - type: web
     name: pulso-rede-criativa
     runtime: python
+    plan: free
+    region: virginia
     buildCommand: ./build.sh
     startCommand: daphne -b 0.0.0.0 -p $PORT config.asgi:application
     healthCheckPath: /health/
+    autoDeployTrigger: checksPass
     envVars:
       - key: PYTHON_VERSION
         value: 3.12.8
@@ -30,9 +33,15 @@ services:
 
   - type: keyvalue
     name: pulso-cache
+    plan: free
+    region: virginia
+    maxmemoryPolicy: allkeys-lru
     ipAllowList: []
 
 databases:
   - name: pulso-db
+    plan: free
+    region: virginia
     databaseName: pulso
     user: pulso
+    ipAllowList: []
