@@ -175,6 +175,12 @@ Consulte [SECURITY.md](SECURITY.md) para limites e processo de relato.
 
 O repositório inclui `render.yaml`, `build.sh` e `Dockerfile`. No Render, crie um Blueprint a partir deste repositório; banco PostgreSQL e Redis serão vinculados por variáveis. Configure opcionalmente `GEMINI_API_KEY` e credenciais TURN.
 
+No plano gratuito, o Render não disponibiliza Shell. Para criar o primeiro
+administrador, adicione temporariamente `DJANGO_SUPERUSER_USERNAME`,
+`DJANGO_SUPERUSER_EMAIL` e `DJANGO_SUPERUSER_PASSWORD` às variáveis secretas
+do serviço e faça um novo deploy. O `build.sh` cria a conta somente quando ela
+ainda não existe; depois do primeiro login, remova essas três variáveis.
+
 O link público será adicionado aqui após a criação do ambiente de produção.
 
 ## Roadmap de produto
