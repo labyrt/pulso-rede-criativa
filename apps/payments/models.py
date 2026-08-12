@@ -13,6 +13,13 @@ class SupportIntent(models.Model):
         blank=True,
     )
     creator = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="support_received")
+    post = models.ForeignKey(
+        "social.Post",
+        on_delete=models.SET_NULL,
+        related_name="support_intents",
+        null=True,
+        blank=True,
+    )
     amount = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     message = models.CharField(max_length=180, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)

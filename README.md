@@ -12,7 +12,7 @@
 
 ---
 
-PULSO é uma rede social brasileira pensada para fotógrafos, nail artists, cabeleireiros, designers, tatuadores, músicos, pintores e pessoas de todas as expressões criativas. O projeto combina publicação de portfólio, descoberta, conexões profissionais, apoio direto e conversas em tempo real em uma experiência original e responsiva.
+PULSO é uma rede social brasileira pensada para fotógrafos, nail artists, cabeleireiros, designers, desenvolvedores, tatuadores, músicos, pintores e pessoas de todas as expressões criativas. O projeto combina publicação de portfólio, descoberta, conexões profissionais, apoio direto e conversas em tempo real em uma experiência original e responsiva.
 
 Este é o projeto final do curso de Python da EBAC. Ele cumpre os requisitos de autenticação, perfil, sistema de seguidores, feed, curtidas, comentários, API REST e deploy — e amplia o escopo com uma base de produto contemporânea.
 
@@ -21,12 +21,12 @@ Este é o projeto final do curso de Python da EBAC. Ele cumpre os requisitos de 
 ### Comunidade
 
 - cadastro e login por sessão segura;
-- perfil editável com nome, senha, bio, foto, capa, área criativa, localização e portfólio;
+- perfil editável com nome, senha, bio, upload de foto e capa, área criativa, localização, portfólio e redes sociais;
 - seguir/deixar de seguir, listas de seguidores e seguidos;
 - bloqueio de usuários com remoção automática das conexões;
 - feed estrito: exibe publicações apenas de pessoas seguidas;
 - exploração de trabalhos por categoria, texto, tags e criador;
-- posts de até 500 caracteres com imagem, vídeo, tags e link de portfólio;
+- posts de até 500 caracteres com upload direto de imagem, vídeo, tags e link de portfólio;
 - curtidas, comentários/respostas, reposts e favoritos;
 - notificações de conexões e interações.
 
@@ -42,7 +42,7 @@ Este é o projeto final do curso de Python da EBAC. Ele cumpre os requisitos de 
 ### Economia criativa e IA
 
 - chave Pix cifrada no perfil;
-- QR Code Pix Copia e Cola gerado no backend seguindo o padrão EMV;
+- QR Code Pix Copia e Cola no perfil e em cada publicação que aceite apoio;
 - transferência ocorre diretamente entre apoiador e criador: a PULSO não custodia valores;
 - assistente editorial de legendas com Gemini quando a chave está configurada;
 - fallback local funcional quando não há Gemini, sem quebrar o produto;
@@ -50,7 +50,7 @@ Este é o projeto final do curso de Python da EBAC. Ele cumpre os requisitos de 
 
 ## Experiência visual
 
-A interface é autoral. A direção combina tipografia editorial, espaços generosos, cores de alto contraste, microinterações e cartões com movimento sutil. O produto não copia componentes ou identidade de outra rede. Há modo responsivo completo e respeito a `prefers-reduced-motion` para acessibilidade.
+A interface é autoral. A direção combina tipografia editorial, superfícies de cor sólida, espaços generosos, alto contraste e microinterações discretas. O produto não copia componentes ou identidade de outra rede. Há temas claro e escuro, tooltips, modo responsivo completo e respeito a `prefers-reduced-motion` para acessibilidade.
 
 ## Arquitetura
 
@@ -125,6 +125,7 @@ Rotas principais:
 |---|---|
 | `POST /api/v1/auth/register/` | criar conta |
 | `POST /api/v1/auth/login/` | iniciar sessão |
+| `POST /api/v1/auth/logout/` | encerrar sessão |
 | `GET/PATCH /api/v1/auth/me/` | consultar ou editar perfil |
 | `POST /api/v1/auth/profiles/{username}/follow/` | alternar seguir |
 | `GET /api/v1/social/feed/` | feed de pessoas seguidas |
@@ -146,6 +147,7 @@ Copie `.env.example` e ajuste as variáveis. Nunca envie o `.env` ao GitHub.
 | `DATABASE_URL` | PostgreSQL; ausente usa SQLite local |
 | `REDIS_URL` | Channels e cache; ausente usa memória local |
 | `FIELD_ENCRYPTION_KEY` | chave Fernet para mensagens e Pix |
+| `CLOUDINARY_URL` | armazenamento persistente para uploads de imagens em produção |
 | `GEMINI_API_KEY` | habilita IA; é opcional e fica apenas no servidor |
 | `WEBRTC_TURN_*` | credenciais para chamadas em redes restritivas |
 
@@ -165,6 +167,7 @@ python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().d
 - mensagens e chaves Pix cifradas em repouso;
 - autorização de objeto e bloqueios aplicados no backend;
 - nenhuma chave secreta é enviada ao frontend;
+- uploads aceitam somente JPG, PNG e WebP válidos, com limite de 8 MB;
 - a IA só recebe o rascunho depois de uma ação explícita da pessoa.
 
 Consulte [SECURITY.md](SECURITY.md) para limites e processo de relato.
@@ -173,7 +176,7 @@ Consulte [SECURITY.md](SECURITY.md) para limites e processo de relato.
 
 ## Deploy
 
-O repositório inclui `render.yaml`, `build.sh` e `Dockerfile`. No Render, crie um Blueprint a partir deste repositório; banco PostgreSQL e Redis serão vinculados por variáveis. Configure opcionalmente `GEMINI_API_KEY` e credenciais TURN.
+O repositório inclui `render.yaml`, `build.sh` e `Dockerfile`. No Render, crie um Blueprint a partir deste repositório; banco PostgreSQL e Redis serão vinculados por variáveis. Para persistir os uploads no plano gratuito, configure `CLOUDINARY_URL` como segredo no serviço. `GEMINI_API_KEY` e as credenciais TURN continuam opcionais.
 
 No plano gratuito, o Render não disponibiliza Shell. Para criar o primeiro
 administrador, adicione temporariamente `DJANGO_SUPERUSER_USERNAME`,
@@ -185,7 +188,7 @@ O link público será adicionado aqui após a criação do ambiente de produçã
 
 ## Roadmap de produto
 
-- upload de mídia em serviço compatível com S3;
+- vídeos enviados diretamente e processamento assíncrono de mídia;
 - moderação e denúncias com painel de confiança e segurança;
 - E2EE real com gerenciamento de chaves no cliente;
 - chamadas em grupo e TURN gerenciado;

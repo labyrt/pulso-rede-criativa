@@ -36,7 +36,7 @@ class PixView(APIView):
 class SupportIntentView(APIView):
     def post(self, request, username):
         creator = get_object_or_404(User, username=username, is_active=True)
-        serializer = SupportIntentSerializer(data=request.data)
+        serializer = SupportIntentSerializer(data=request.data, context={"creator": creator})
         serializer.is_valid(raise_exception=True)
         intent = serializer.save(supporter=request.user, creator=creator)
         return Response(SupportIntentSerializer(intent).data, status=status.HTTP_201_CREATED)

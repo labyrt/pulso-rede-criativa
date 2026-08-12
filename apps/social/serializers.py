@@ -1,6 +1,7 @@
 from rest_framework import serializers
 
 from apps.accounts.serializers import UserSummarySerializer
+from apps.common.media import MediaUploadError, store_image
 
 from .models import Bookmark, Comment, Like, Notification, Post, Repost
 
@@ -25,6 +26,8 @@ class PostSerializer(serializers.ModelSerializer):
     is_reposted = serializers.SerializerMethodField()
     latest_comments = serializers.SerializerMethodField()
     tag_list = serializers.SerializerMethodField()
+    image_upload = serializers.ImageField(write_only=True, required=False)
+    pix_enabled = serializers.SerializerMethodField()
 
     class Meta:
         model = Post
@@ -33,11 +36,14 @@ class PostSerializer(serializers.ModelSerializer):
             "author",
             "body",
             "category",
+            "image_upload",
             "image_url",
             "video_url",
             "portfolio_url",
             "tags",
             "tag_list",
+            "accepts_support",
+            "pix_enabled",
             "likes_count",
             "comments_count",
             "reposts_count",
@@ -48,12 +54,34 @@ class PostSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         )
-        read_only_fields = ("author", "created_at", "updated_at")
+        read_only_fields = ("author", "image_url", "created_at", "updated_at")
 
     def validate(self, attrs):
-        if not attrs.get("body", "").strip() and not any(attrs.get(field) for field in ("image_url", "video_url", "portfolio_url")):
-            raise serializers.ValidationError("Conte uma história ou adicione um link criativo.")
+        body = attrs.get("body", getattr(self.instance, "body", ""))
+        has_existing_media = bool(
+            self.instance
+            and any(getattr(self.instance, field, "") for field in ("image_url", "video_url", "portfolio_url"))
+        )
+        has_new_media = bool(attrs.get("image_upload") or any(attrs.get(field) for field in ("video_url", "portfolio_url")))
+        if not body.strip() and not has_existing_media and not has_new_media:
+            raise serializers.ValidationError("Conte uma história ou adicione uma imagem ou portfólio.")
         return attrs
+
+    def _store_upload(self, validated_data):
+        upload = validated_data.pop("image_upload", None)
+        if not upload:
+            return validated_data
+        try:
+            validated_data["image_url"] = store_image(upload, "posts", self.context.get("request"))
+        except MediaUploadError as exc:
+            raise serializers.ValidationError({"image_upload": str(exc)}) from exc
+        return validated_data
+
+    def create(self, validated_data):
+        return super().create(self._store_upload(validated_data))
+
+    def update(self, instance, validated_data):
+        return super().update(instance, self._store_upload(validated_data))
 
     def validate_tags(self, value):
         tags = [tag.strip().lstrip("#").lower() for tag in value.split(",") if tag.strip()]
@@ -80,6 +108,10 @@ class PostSerializer(serializers.ModelSerializer):
 
     def get_tag_list(self, obj):
         return [tag for tag in obj.tags.split(",") if tag]
+
+    def get_pix_enabled(self, obj):
+        profile = obj.author.profile
+        return bool(obj.accepts_support and profile.pix_key_ciphertext and profile.pix_receiver_name and profile.pix_city)
 
 
 class NotificationSerializer(serializers.ModelSerializer):

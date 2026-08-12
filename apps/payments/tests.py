@@ -2,6 +2,9 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 from rest_framework.test import APIClient
 
+from apps.social.models import Post
+
+from .models import SupportIntent
 from .pix import build_pix_payload
 
 User = get_user_model()
@@ -31,3 +34,23 @@ class PixTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn("<svg", response.data["qr_svg"])
         self.assertNotIn("pix_key_ciphertext", response.data)
+
+    def test_support_intent_can_reference_a_creator_post(self):
+        post = Post.objects.create(author=self.creator, body="Processo apoiável", accepts_support=True)
+        response = self.client.post(
+            f"/api/v1/support/{self.creator.username}/intent/",
+            {"post": post.pk, "message": "Apoio iniciado via QR Code"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 201)
+        self.assertTrue(SupportIntent.objects.filter(creator=self.creator, supporter=self.supporter, post=post).exists())
+
+    def test_support_intent_rejects_another_creators_post(self):
+        other = User.objects.create_user(username="outra", email="outra@test.dev", password="VeryStrong!123")
+        post = Post.objects.create(author=other, body="Outro trabalho")
+        response = self.client.post(
+            f"/api/v1/support/{self.creator.username}/intent/",
+            {"post": post.pk},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 400)

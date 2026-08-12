@@ -3,6 +3,8 @@ from django.contrib.auth.models import update_last_login
 from django.db import transaction
 from rest_framework import serializers
 
+from apps.common.media import MediaUploadError, store_image
+
 from .models import Follow, Profile, User
 
 
@@ -43,6 +45,7 @@ class PublicProfileSerializer(serializers.ModelSerializer):
     is_following = serializers.SerializerMethodField()
     is_own = serializers.SerializerMethodField()
     pix_enabled = serializers.SerializerMethodField()
+    specialty_label = serializers.CharField(source="get_specialty_display", read_only=True)
 
     class Meta:
         model = Profile
@@ -54,7 +57,12 @@ class PublicProfileSerializer(serializers.ModelSerializer):
             "cover_url",
             "location",
             "website",
+            "instagram_url",
+            "github_url",
+            "linkedin_url",
+            "behance_url",
             "specialty",
+            "specialty_label",
             "pronouns",
             "is_available_for_work",
             "followers_count",
@@ -95,6 +103,8 @@ class ProfileUpdateSerializer(serializers.ModelSerializer):
     email = serializers.EmailField(source="user.email", required=False)
     password = serializers.CharField(write_only=True, required=False, allow_blank=False, trim_whitespace=False)
     pix_key = serializers.CharField(write_only=True, required=False, allow_blank=True, max_length=180)
+    avatar_upload = serializers.ImageField(write_only=True, required=False)
+    cover_upload = serializers.ImageField(write_only=True, required=False)
 
     class Meta:
         model = Profile
@@ -103,10 +113,14 @@ class ProfileUpdateSerializer(serializers.ModelSerializer):
             "email",
             "display_name",
             "bio",
-            "avatar_url",
-            "cover_url",
+            "avatar_upload",
+            "cover_upload",
             "location",
             "website",
+            "instagram_url",
+            "github_url",
+            "linkedin_url",
+            "behance_url",
             "specialty",
             "pronouns",
             "is_available_for_work",
@@ -138,6 +152,16 @@ class ProfileUpdateSerializer(serializers.ModelSerializer):
         user_data = validated_data.pop("user", {})
         password = validated_data.pop("password", None)
         pix_key = validated_data.pop("pix_key", None)
+        avatar_upload = validated_data.pop("avatar_upload", None)
+        cover_upload = validated_data.pop("cover_upload", None)
+        request = self.context.get("request")
+        try:
+            if avatar_upload:
+                validated_data["avatar_url"] = store_image(avatar_upload, "profiles/avatars", request)
+            if cover_upload:
+                validated_data["cover_url"] = store_image(cover_upload, "profiles/covers", request)
+        except MediaUploadError as exc:
+            raise serializers.ValidationError({"image": str(exc)}) from exc
         user = instance.user
         for field, value in user_data.items():
             setattr(user, field, value)

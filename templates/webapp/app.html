@@ -7,19 +7,37 @@
     <aside class="side-nav">
         <a class="brand brand--dark" href="/app/"><span class="brand-mark"><i></i><i></i><i></i></span><b>PULSO</b></a>
         <nav aria-label="Área principal">
-            <a href="/app/" data-nav="feed"><span>⌂</span><b>Meu pulso</b></a>
-            <a href="/explorar/" data-nav="explore"><span>⌁</span><b>Descobrir</b></a>
-            <a href="/mensagens/" data-nav="messages"><span>◫</span><b>Conversas</b><i id="message-badge"></i></a>
-            <a href="/notificacoes/" data-nav="notifications"><span>♢</span><b>Atividade</b><i id="notification-badge"></i></a>
-            <a href="/favoritos/" data-nav="bookmarks"><span>◇</span><b>Guardados</b></a>
-            <a href="#" data-action="my-profile"><span>◉</span><b>Meu espaço</b></a>
+            <a href="/app/" data-nav="feed" data-tooltip="Meu pulso" aria-label="Meu pulso"><span class="nav-icon">⌂</span><b>Meu pulso</b></a>
+            <a href="/explorar/" data-nav="explore" data-tooltip="Descobrir" aria-label="Descobrir"><span class="nav-icon">⌕</span><b>Descobrir</b></a>
+            <a href="/mensagens/" data-nav="messages" data-tooltip="Conversas" aria-label="Conversas"><span class="nav-icon">▢</span><b>Conversas</b><i id="message-badge"></i></a>
+            <a href="/notificacoes/" data-nav="notifications" data-tooltip="Atividade" aria-label="Atividade"><span class="nav-icon">♢</span><b>Atividade</b><i id="notification-badge"></i></a>
+            <a href="/favoritos/" data-nav="bookmarks" data-tooltip="Guardados" aria-label="Guardados"><span class="nav-icon">♡</span><b>Guardados</b></a>
+            <a href="#" data-action="my-profile" data-tooltip="Meu espaço" aria-label="Meu espaço"><span class="nav-icon">○</span><b>Meu espaço</b></a>
         </nav>
-        <button class="button button--ink create-button" data-action="open-composer">Criar publicação <span>＋</span></button>
-        <div class="account-chip skeleton" id="account-chip"></div>
+        <button class="button button--ink create-button" data-action="open-composer" data-tooltip="Criar publicação"><b>Criar publicação</b><span>＋</span></button>
+        <div class="account-area">
+            <button class="account-chip skeleton" id="account-chip" data-action="toggle-account-menu" aria-expanded="false" aria-controls="account-menu"></button>
+            <div class="account-menu" id="account-menu" hidden>
+                <button data-action="edit-profile">Editar perfil <span>✎</span></button>
+                <button data-action="toggle-theme">Modo escuro <span>◐</span></button>
+                <button class="danger-action" data-action="logout">Sair <span>↗</span></button>
+            </div>
+        </div>
     </aside>
 
     <main class="content-column">
-        <header class="mobile-header"><a class="brand brand--dark" href="/app/">PULSO</a><button data-action="open-composer">＋</button></header>
+        <header class="mobile-header">
+            <a class="brand brand--dark" href="/app/">PULSO</a>
+            <div class="mobile-header-actions">
+                <button data-action="open-composer" aria-label="Criar publicação">＋</button>
+                <button class="mobile-menu-button" data-action="toggle-mobile-menu" aria-label="Abrir menu" aria-expanded="false">☰</button>
+            </div>
+            <div class="mobile-account-menu" id="mobile-account-menu" hidden>
+                <button data-action="edit-profile">Editar perfil</button>
+                <button data-action="toggle-theme">Alternar tema</button>
+                <button data-action="logout">Sair</button>
+            </div>
+        </header>
         <div id="page-content" class="page-content"><div class="page-loader"><i></i><span>Sentindo o pulso...</span></div></div>
     </main>
 
@@ -31,7 +49,7 @@
     </aside>
 
     <nav class="mobile-nav" aria-label="Navegação móvel">
-        <a href="/app/" data-nav="feed">⌂</a><a href="/explorar/" data-nav="explore">⌁</a><button data-action="open-composer">＋</button><a href="/mensagens/" data-nav="messages">◫</a><a href="#" data-action="my-profile">◉</a>
+        <a href="/app/" data-nav="feed" aria-label="Meu pulso">⌂</a><a href="/explorar/" data-nav="explore" aria-label="Descobrir">⌕</a><button data-action="open-composer" aria-label="Criar publicação">＋</button><a href="/mensagens/" data-nav="messages" aria-label="Conversas">▢</a><a href="#" data-action="my-profile" aria-label="Meu espaço">○</a>
     </nav>
 </div>
 
@@ -40,11 +58,13 @@
         <header><div><span class="eyebrow">Novo pulso</span><h2>O que está criando?</h2></div><button class="icon-button" value="cancel" aria-label="Fechar">×</button></header>
         <textarea name="body" id="post-body" maxlength="500" rows="6" placeholder="Mostre uma ideia, um processo ou uma oportunidade..."></textarea>
         <div class="composer-grid">
-            <label>Expressão<select name="category"><option value="art">Arte</option><option value="photography">Fotografia</option><option value="beauty">Beleza</option><option value="design">Design</option><option value="fashion">Moda</option><option value="music">Música</option><option value="process">Processo criativo</option><option value="opportunity">Oportunidade</option><option value="other">Outros</option></select></label>
+            <label>Expressão<select name="category"><option value="art">Arte</option><option value="photography">Fotografia</option><option value="beauty">Beleza</option><option value="design">Design</option><option value="fashion">Moda</option><option value="music">Música</option><option value="development">Desenvolvimento</option><option value="process">Processo criativo</option><option value="opportunity">Oportunidade</option><option value="other">Outros</option></select></label>
             <label>Tags<input name="tags" placeholder="processo, retrato, brasil"></label>
-            <label>Imagem (URL HTTPS)<input name="image_url" type="url" placeholder="https://..."></label>
+            <label class="upload-field">Imagem do dispositivo<input name="image_upload" id="post-image-upload" type="file" accept="image/jpeg,image/png,image/webp"><span>Selecionar JPG, PNG ou WebP · até 8 MB</span></label>
             <label>Portfólio (opcional)<input name="portfolio_url" type="url" placeholder="https://..."></label>
+            <label class="wide check-field"><span><input type="checkbox" name="accepts_support" checked> Exibir “Apoiar este trabalho” quando meu Pix estiver ativo</span></label>
         </div>
+        <div class="upload-preview" id="post-image-preview" hidden></div>
         <div class="ai-row"><button type="button" class="ai-button" data-action="ai-caption"><span>✦</span> Lapidar com assistente</button><small id="char-counter">0 / 500</small></div>
         <footer><span class="privacy-note">A IA só recebe o texto quando você pede.</span><button type="submit" class="button button--ink">Publicar agora ↗</button></footer>
     </form>
