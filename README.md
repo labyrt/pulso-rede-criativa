@@ -190,4 +190,4 @@ O link público será adicionado aqui após a criação do ambiente de produçã
 
 ---
 
-Desenvolvido por **Kaio Felipe** como projeto final de Python — EBAC.
+Desenvolvido por **Lucy Mazzini (Labyrt)** como projeto final de Python — EBAC.
