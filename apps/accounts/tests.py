@@ -1,11 +1,22 @@
+from io import BytesIO
+import tempfile
+
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.core.files.uploadedfile import SimpleUploadedFile
+from django.test import TestCase, override_settings
 from django.urls import reverse
+from PIL import Image
 from rest_framework.test import APIClient
 
 from .models import Follow
 
 User = get_user_model()
+
+
+def uploaded_image(name="avatar.png"):
+    buffer = BytesIO()
+    Image.new("RGB", (120, 120), "#5375ff").save(buffer, format="PNG")
+    return SimpleUploadedFile(name, buffer.getvalue(), content_type="image/png")
 
 
 class AccountsAPITests(TestCase):
@@ -36,6 +47,12 @@ class AccountsAPITests(TestCase):
         response = self.client.post(reverse("login"), {"identifier": "luna@test.dev", "password": "VeryStrong!123"}, format="json")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data["username"], "luna")
+
+    def test_logout_clears_the_session(self):
+        self.client.post(reverse("login"), {"identifier": "luna", "password": "VeryStrong!123"}, format="json")
+        response = self.client.post(reverse("logout"))
+        self.assertEqual(response.status_code, 204)
+        self.assertNotIn("_auth_user_id", self.client.session)
 
     def test_partial_profile_update_does_not_require_other_fields(self):
         self.client.force_authenticate(self.user)
@@ -72,3 +89,20 @@ class AccountsAPITests(TestCase):
         self.assertNotEqual(self.user.profile.pix_key_ciphertext, "pix@test.dev")
         self.assertEqual(self.user.profile.pix_key, "pix@test.dev")
         self.assertNotIn("pix_key", response.data)
+
+    def test_profile_accepts_direct_image_upload_and_social_links(self):
+        self.client.force_authenticate(self.user)
+        with tempfile.TemporaryDirectory() as media_root, override_settings(MEDIA_ROOT=media_root, DEBUG=True):
+            response = self.client.patch(
+                reverse("me"),
+                {
+                    "avatar_upload": uploaded_image(),
+                    "github_url": "https://github.com/luna",
+                    "specialty": "development",
+                },
+                format="multipart",
+            )
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("/media/uploads/profiles/avatars/", response.data["avatar_url"])
+        self.assertEqual(response.data["github_url"], "https://github.com/luna")
+        self.assertEqual(response.data["specialty_label"], "Desenvolvimento")

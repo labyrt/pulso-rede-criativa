@@ -1,6 +1,11 @@
+from io import BytesIO
+import tempfile
+
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.core.files.uploadedfile import SimpleUploadedFile
+from django.test import TestCase, override_settings
 from django.urls import reverse
+from PIL import Image
 from rest_framework.test import APIClient
 
 from apps.accounts.models import Follow
@@ -8,6 +13,12 @@ from apps.accounts.models import Follow
 from .models import Bookmark, Comment, Like, Post, Repost
 
 User = get_user_model()
+
+
+def uploaded_post_image():
+    buffer = BytesIO()
+    Image.new("RGB", (320, 220), "#ff7657").save(buffer, format="JPEG")
+    return SimpleUploadedFile("trabalho.jpg", buffer.getvalue(), content_type="image/jpeg")
 
 
 class SocialAPITests(TestCase):
@@ -27,6 +38,17 @@ class SocialAPITests(TestCase):
         self.assertEqual(response.data["author"]["username"], "kai")
         self.assertEqual(response.data["tag_list"], ["design", "processo"])
         self.assertIn("likes_count", response.data)
+
+    def test_post_accepts_direct_image_upload(self):
+        with tempfile.TemporaryDirectory() as media_root, override_settings(MEDIA_ROOT=media_root, DEBUG=True):
+            response = self.client.post(
+                "/api/v1/social/posts/",
+                {"body": "Imagem do meu processo", "category": "development", "image_upload": uploaded_post_image()},
+                format="multipart",
+            )
+        self.assertEqual(response.status_code, 201)
+        self.assertIn("/media/uploads/posts/", response.data["image_url"])
+        self.assertNotIn("image_upload", response.data)
 
     def test_blank_post_is_rejected(self):
         response = self.client.post("/api/v1/social/posts/", {"body": "", "category": "art"}, format="json")

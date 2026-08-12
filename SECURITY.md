@@ -14,6 +14,8 @@ Não abra uma issue pública para vulnerabilidades. Envie um relato privado ao m
 - Mensagens e chaves Pix são cifradas em repouso com Fernet.
 - Segredos só são aceitos por variáveis de ambiente.
 - Autorização de objeto impede editar posts e conversas de terceiros.
+- Uploads são validados no backend, limitados a 8 MB e restritos a JPG, PNG e WebP.
+- Em produção, a mídia é enviada ao provedor configurado por `CLOUDINARY_URL`; o segredo nunca chega ao navegador.
 
 ## Limites honestos
 

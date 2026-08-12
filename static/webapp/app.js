@@ -20,6 +20,10 @@
     return `${Math.floor(seconds / 86400)} d`;
   };
 
+  const savedTheme = localStorage.getItem("pulso-theme");
+  const initialTheme = savedTheme || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+  document.documentElement.dataset.theme = initialTheme;
+
   async function api(url, options = {}) {
     const headers = { Accept: "application/json", ...(options.headers || {}) };
     if (options.body && !(options.body instanceof FormData)) headers["Content-Type"] = "application/json";
@@ -45,6 +49,15 @@
 
   function serialize(form) {
     return Object.fromEntries([...new FormData(form).entries()].filter(([, value]) => String(value).trim() !== ""));
+  }
+
+
+  function multipart(form) {
+    const data = new FormData(form);
+    for (const [key, value] of [...data.entries()]) {
+      if ((typeof value === "string" && !value.trim()) || (value instanceof File && !value.size)) data.delete(key);
+    }
+    return data;
   }
 
   function renderError(error) {
@@ -78,9 +91,41 @@
     const chip = $("#account-chip");
     if (!chip || !state.me) return;
     chip.classList.remove("skeleton");
-    chip.innerHTML = `${avatar(state.me)}<div><strong>${escapeHtml(state.me.display_name)}</strong><small>@${escapeHtml(state.me.username)}</small></div><span>•••</span>`;
-    chip.addEventListener("click", openProfileEditor);
+    chip.innerHTML = `${avatar(state.me)}<div><strong>${escapeHtml(state.me.display_name)}</strong><small>@${escapeHtml(state.me.username)}</small></div><span class="account-more">•••</span>`;
     $$('[data-action="my-profile"]').forEach(link => link.href = `/perfil/${state.me.username}/`);
+  }
+
+  function toggleMenu(id, trigger) {
+    const menu = $(`#${id}`);
+    if (!menu) return;
+    const shouldOpen = menu.hidden;
+    menu.hidden = !shouldOpen;
+    trigger?.setAttribute("aria-expanded", String(shouldOpen));
+  }
+
+  function closeMenus() {
+    for (const id of ["account-menu", "mobile-account-menu"]) {
+      const menu = $(`#${id}`);
+      if (menu) menu.hidden = true;
+    }
+    $('[data-action="toggle-account-menu"]')?.setAttribute("aria-expanded", "false");
+    $('[data-action="toggle-mobile-menu"]')?.setAttribute("aria-expanded", "false");
+  }
+
+  function toggleTheme() {
+    const theme = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+    document.documentElement.dataset.theme = theme;
+    localStorage.setItem("pulso-theme", theme);
+    toast(theme === "dark" ? "Modo escuro ativado." : "Modo claro ativado.", "success");
+  }
+
+  async function logoutUser() {
+    try {
+      await api("/api/v1/auth/logout/", { method: "POST" });
+      location.assign("/");
+    } catch (error) {
+      toast(error.message, "error");
+    }
   }
 
   function activateNav() {
@@ -138,6 +183,7 @@
           <button data-post-action="bookmark" class="${post.is_bookmarked ? "active-bookmark" : ""}" aria-label="Guardar">${post.is_bookmarked ? "◆" : "◇"}</button>
           <button data-post-action="share" aria-label="Compartilhar">↗</button>
         </div>
+        ${post.pix_enabled ? `<button class="post-support" data-action="support" data-username="${escapeHtml(post.author.username)}" data-post-id="${post.id}"><span>♡</span> Apoiar este trabalho via Pix</button>` : ""}
         ${comments ? `<div class="comment-preview">${comments}</div>` : ""}
       </div>
     </article>`;
@@ -206,17 +252,21 @@
     try {
       const profile = await api(`/api/v1/auth/profiles/${encodeURIComponent(username)}/`);
       const posts = await api(`/api/v1/social/posts/?author__username=${encodeURIComponent(username)}&page_size=30`);
+      const networks = [["instagram_url","Instagram"],["github_url","GitHub"],["linkedin_url","LinkedIn"],["behance_url","Behance"]]
+        .filter(([field]) => profile[field])
+        .map(([field,label]) => `<a class="social-link" href="${escapeHtml(profile[field])}" target="_blank" rel="noopener noreferrer">${label} ↗</a>`).join("");
       content.innerHTML = `<section class="profile-hero">
-        <div class="profile-cover" ${profile.cover_url ? `style="background-image:url('${escapeHtml(profile.cover_url)}')"` : ""}></div>
+        <div class="profile-cover" ${profile.cover_url ? `style="background-image:url('${escapeHtml(profile.cover_url)}')"` : ""}>${profile.is_own ? '<button class="media-edit media-edit--cover" data-action="edit-profile" aria-label="Alterar imagem de capa">✎ <span>Alterar capa</span></button>' : ""}</div>
         <div class="profile-main">
-          <div class="profile-avatar">${profile.avatar_url ? `<img src="${escapeHtml(profile.avatar_url)}" alt="">` : initials(profile.display_name)}</div>
+          <div class="profile-avatar">${profile.avatar_url ? `<img src="${escapeHtml(profile.avatar_url)}" alt="">` : initials(profile.display_name)}${profile.is_own ? '<button class="media-edit media-edit--avatar" data-action="edit-profile" aria-label="Alterar foto de perfil">✎</button>' : ""}</div>
           <div class="profile-actions">
             ${profile.is_own ? '<button class="outline-button" data-action="edit-profile">Editar perfil</button>' : `<button class="outline-button" data-action="message-user" data-username="${escapeHtml(profile.username)}">Mensagem</button>${profile.pix_enabled ? `<button class="outline-button outline-button--pink" data-action="support" data-username="${escapeHtml(profile.username)}">Apoiar</button>` : ""}<button class="button button--ink" data-follow="${escapeHtml(profile.username)}">${profile.is_following ? "Seguindo" : "Seguir"}</button>`}
           </div>
           <h1>${escapeHtml(profile.display_name)}</h1><span class="profile-handle">@${escapeHtml(profile.username)}</span>
           ${profile.is_available_for_work ? '<p><span class="available-pill">disponível para projetos</span></p>' : ""}
           <p class="profile-bio">${escapeHtml(profile.bio || "Este espaço ainda está ganhando forma.")}</p>
-          <div class="profile-meta">${profile.specialty ? `<span>✦ ${escapeHtml(profile.specialty)}</span>` : ""}${profile.location ? `<span>⌖ ${escapeHtml(profile.location)}</span>` : ""}${profile.website ? `<a href="${escapeHtml(profile.website)}" target="_blank" rel="noopener">↗ portfólio</a>` : ""}</div>
+          <div class="profile-meta">${profile.specialty_label ? `<span>✦ ${escapeHtml(profile.specialty_label)}</span>` : ""}${profile.location ? `<span>⌖ ${escapeHtml(profile.location)}</span>` : ""}${profile.website ? `<a href="${escapeHtml(profile.website)}" target="_blank" rel="noopener noreferrer">Portfólio ↗</a>` : ""}</div>
+          ${networks ? `<div class="social-links">${networks}</div>` : ""}
           <div class="profile-counts"><span><strong>${profile.following_count}</strong> seguindo</span><span><strong>${profile.followers_count}</strong> seguidores</span><span><strong>${profile.posts_count}</strong> publicações</span></div>
         </div></section><div id="post-list">${(posts.results || posts).length ? (posts.results || posts).map(postCard).join("") : emptyState("◌", "Espaço aberto.", "A primeira publicação desta pessoa ainda vai chegar.")}</div>`;
     } catch (error) { content.innerHTML = emptyState("!", "Perfil não encontrado.", error.message); }
@@ -250,8 +300,10 @@
     event.preventDefault();
     const form = event.currentTarget;
     try {
-      await api("/api/v1/social/posts/", { method:"POST", body:JSON.stringify(serialize(form)) });
-      form.reset(); $("#composer-modal").close(); toast("Seu trabalho entrou no pulso.", "success"); reloadSection();
+      const data = multipart(form);
+      data.set("accepts_support", String(form.elements.accepts_support.checked));
+      await api("/api/v1/social/posts/", { method:"POST", body:data });
+      form.reset(); $("#post-image-preview").hidden = true; $("#post-image-preview").innerHTML = ""; $("#composer-modal").close(); toast("Seu trabalho entrou no pulso.", "success"); reloadSection();
     } catch (error) { toast(error.message, "error"); }
   }
 
@@ -273,10 +325,13 @@
     return `<header><div><span class="eyebrow">Seu espaço</span><h2>Edite apenas o que quiser.</h2></div><button class="icon-button" value="cancel">×</button></header><div class="profile-fields">
       <label>Nome criativo<input name="display_name" value="${escapeHtml(p.display_name || "")}"></label><label>Usuário<input name="username" value="${escapeHtml(p.username)}"></label>
       <label class="wide">Bio<textarea name="bio" maxlength="220">${escapeHtml(p.bio || "")}</textarea></label>
-      <label>Foto (URL HTTPS)<input type="url" name="avatar_url" value="${escapeHtml(p.avatar_url || "")}"></label><label>Capa (URL HTTPS)<input type="url" name="cover_url" value="${escapeHtml(p.cover_url || "")}"></label>
+      <label class="upload-field">Foto de perfil<input type="file" name="avatar_upload" accept="image/jpeg,image/png,image/webp"><span>Escolher imagem · até 8 MB</span></label><label class="upload-field">Imagem de capa<input type="file" name="cover_upload" accept="image/jpeg,image/png,image/webp"><span>Escolher imagem · até 8 MB</span></label>
       <label>Localização<input name="location" value="${escapeHtml(p.location || "")}"></label><label>Portfólio<input type="url" name="website" value="${escapeHtml(p.website || "")}"></label>
-      <label>Expressão<select name="specialty">${[["photography","Fotografia"],["nail-art","Nail art"],["hair","Cabelo"],["painting","Pintura"],["digital-art","Arte digital"],["fashion","Moda"],["music","Música"],["design","Design"],["tattoo","Tatuagem"],["crafts","Artesanato"],["other","Outra expressão"]].map(([v,l]) => `<option value="${v}" ${p.specialty===v?"selected":""}>${l}</option>`).join("")}</select></label>
+      <label>Expressão<select name="specialty">${[["photography","Fotografia"],["nail-art","Nail art"],["hair","Cabelo"],["painting","Pintura"],["digital-art","Arte digital"],["fashion","Moda"],["music","Música"],["design","Design"],["tattoo","Tatuagem"],["crafts","Artesanato"],["development","Desenvolvimento"],["other","Outra expressão"]].map(([v,l]) => `<option value="${v}" ${p.specialty===v?"selected":""}>${l}</option>`).join("")}</select></label>
       <label>Nova senha <small>(opcional)</small><input type="password" name="password" minlength="10" autocomplete="new-password"></label>
+      <div class="divider">Redes e presença digital</div>
+      <label>Instagram<input type="url" name="instagram_url" value="${escapeHtml(p.instagram_url || "")}" placeholder="https://instagram.com/..."></label><label>GitHub<input type="url" name="github_url" value="${escapeHtml(p.github_url || "")}" placeholder="https://github.com/..."></label>
+      <label>LinkedIn<input type="url" name="linkedin_url" value="${escapeHtml(p.linkedin_url || "")}" placeholder="https://linkedin.com/in/..."></label><label>Behance<input type="url" name="behance_url" value="${escapeHtml(p.behance_url || "")}" placeholder="https://behance.net/..."></label>
       <div class="divider">Apoio direto por Pix <small>— a chave é cifrada no banco</small></div>
       <label>Tipo de chave<select name="pix_key_type"><option value="">Não alterar</option><option value="cpf">CPF</option><option value="email">E-mail</option><option value="phone">Celular</option><option value="random">Aleatória</option></select></label><label>Chave Pix<input name="pix_key" placeholder="Só preencha para alterar"></label>
       <label>Nome do recebedor<input name="pix_receiver_name" maxlength="25" placeholder="Como consta no Pix"></label><label>Cidade<input name="pix_city" maxlength="15" placeholder="Sua cidade"></label>
@@ -288,19 +343,19 @@
 
   async function submitProfile(event) {
     event.preventDefault();
-    const data = serialize(event.currentTarget);
-    data.is_available_for_work = !!event.currentTarget.elements.is_available_for_work.checked;
+    const data = multipart(event.currentTarget);
+    data.set("is_available_for_work", String(event.currentTarget.elements.is_available_for_work.checked));
     try {
-      state.me = await api("/api/v1/auth/me/", { method:"PATCH", body:JSON.stringify(data) });
+      state.me = await api("/api/v1/auth/me/", { method:"PATCH", body:data });
       $("#profile-modal").close(); renderAccount(); toast("Perfil atualizado.", "success"); if (section === "profile") loadProfile(state.me.username);
     } catch (error) { toast(error.message, "error"); }
   }
 
-  async function openSupport(username) {
+  async function openSupport(username, postId = "") {
     const modal=$("#support-modal"), box=$("#support-content"); box.innerHTML='<div class="page-loader"><i></i></div>'; modal.showModal();
     try {
       const data = await api(`/api/v1/support/${encodeURIComponent(username)}/pix/`);
-      box.innerHTML = `<header><div><span class="eyebrow">Apoio direto</span><h2>Apoie ${escapeHtml(data.creator)}.</h2></div><button class="icon-button" data-action="close-support">×</button></header><p>Escaneie no app do banco ou copie o código. A PULSO não toca no dinheiro.</p><div class="qr-wrap">${data.qr_svg}</div><div class="pix-code">${escapeHtml(data.payload)}</div><footer><button class="button button--ghost" data-action="copy-pix" data-payload="${escapeHtml(data.payload)}">Copiar código</button><button class="button button--ink" data-action="support-done" data-username="${escapeHtml(username)}">Já apoiei ♡</button></footer>`;
+      box.innerHTML = `<header><div><span class="eyebrow">Apoio direto</span><h2>Apoie ${escapeHtml(data.creator)}.</h2></div><button class="icon-button" data-action="close-support">×</button></header><p>Escaneie no app do banco ou copie o código. O valor vai direto para a pessoa criadora; o PULSO não intermedeia o dinheiro.</p><div class="qr-wrap">${data.qr_svg}</div><div class="pix-code">${escapeHtml(data.payload)}</div><footer><button class="button button--ghost" data-action="copy-pix" data-payload="${escapeHtml(data.payload)}">Copiar código</button><button class="button button--ink" data-action="support-done" data-username="${escapeHtml(username)}" data-post-id="${escapeHtml(postId)}">Já apoiei ♡</button></footer>`;
     } catch (error) { box.innerHTML = `<header><h2>Apoio indisponível.</h2><button class="icon-button" data-action="close-support">×</button></header><p>${escapeHtml(error.message)}</p>`; }
   }
 
@@ -335,7 +390,46 @@
     activateNav(); try{state.me=await api("/api/v1/auth/me/");}catch(_){location.assign("/entrar/");return} renderAccount(); loadSuggestions();
     if(section==="feed")loadFeed(); else if(section==="explore")loadExplore(); else if(section==="bookmarks")loadBookmarks(); else if(section==="notifications")loadNotifications(); else if(section==="messages")loadMessages(); else if(section==="profile")loadProfile(profileUsername||state.me.username); else loadCreators();
     $("#post-form")?.addEventListener("submit",submitPost); $("#profile-form")?.addEventListener("submit",submitProfile); $("#post-body")?.addEventListener("input",e=>$("#char-counter").textContent=`${e.target.value.length} / 500`);
-    document.addEventListener("click",async event=>{const action=event.target.closest("[data-action]")?.dataset.action;const follow=event.target.closest("[data-follow]");const postAction=event.target.closest("[data-post-action]");const call=event.target.closest("[data-call]");if(follow){event.preventDefault();toggleFollow(follow.dataset.follow,follow)}else if(postAction){event.preventDefault();handlePostAction(postAction)}else if(call)startCall(call.dataset.call);else if(action==="open-composer")openComposer();else if(action==="ai-caption")aiCaption();else if(action==="edit-profile")openProfileEditor();else if(action==="support")openSupport(event.target.closest("[data-username]").dataset.username);else if(action==="close-support")$("#support-modal").close();else if(action==="copy-pix"){await navigator.clipboard.writeText(event.target.closest("[data-payload]").dataset.payload);toast("Código Pix copiado.","success")}else if(action==="support-done"){const username=event.target.dataset.username;await api(`/api/v1/support/${username}/intent/`,{method:"POST",body:JSON.stringify({message:"Apoio iniciado via QR Code"})});$("#support-modal").close();toast("Seu apoio faz a cultura circular ♡","success")}else if(action==="message-user")startConversation(event.target.dataset.username);else if(action==="refresh-creators")loadSuggestions();else if(action==="hangup")hangup()});
+    $("#post-image-upload")?.addEventListener("change", event => {
+      const file = event.target.files[0];
+      const preview = $("#post-image-preview");
+      if (!file) { preview.hidden = true; preview.innerHTML = ""; return; }
+      if (file.size > 8 * 1024 * 1024) { event.target.value = ""; toast("A imagem deve ter no máximo 8 MB.", "error"); return; }
+      const url = URL.createObjectURL(file);
+      preview.innerHTML = `<img src="${url}" alt="Prévia da imagem selecionada"><button type="button" data-action="remove-post-image">Remover</button>`;
+      preview.hidden = false;
+    });
+    document.addEventListener("click", async event => {
+      const actionTarget = event.target.closest("[data-action]");
+      const action = actionTarget?.dataset.action;
+      const follow = event.target.closest("[data-follow]");
+      const postAction = event.target.closest("[data-post-action]");
+      const call = event.target.closest("[data-call]");
+      if (follow) { event.preventDefault(); toggleFollow(follow.dataset.follow, follow); }
+      else if (postAction) { event.preventDefault(); handlePostAction(postAction); }
+      else if (call) startCall(call.dataset.call);
+      else if (action === "open-composer") { closeMenus(); openComposer(); }
+      else if (action === "ai-caption") aiCaption();
+      else if (action === "edit-profile") { closeMenus(); openProfileEditor(); }
+      else if (action === "toggle-account-menu") toggleMenu("account-menu", actionTarget);
+      else if (action === "toggle-mobile-menu") toggleMenu("mobile-account-menu", actionTarget);
+      else if (action === "toggle-theme") { closeMenus(); toggleTheme(); }
+      else if (action === "logout") { closeMenus(); await logoutUser(); }
+      else if (action === "support") openSupport(actionTarget.dataset.username, actionTarget.dataset.postId || "");
+      else if (action === "close-support") $("#support-modal").close();
+      else if (action === "copy-pix") { await navigator.clipboard.writeText(actionTarget.dataset.payload); toast("Código Pix copiado.", "success"); }
+      else if (action === "support-done") {
+        const payload = { message: "Apoio iniciado via QR Code" };
+        if (actionTarget.dataset.postId) payload.post = Number(actionTarget.dataset.postId);
+        await api(`/api/v1/support/${actionTarget.dataset.username}/intent/`, { method:"POST", body:JSON.stringify(payload) });
+        $("#support-modal").close(); toast("Seu apoio faz a cultura circular ♡", "success");
+      }
+      else if (action === "message-user") startConversation(actionTarget.dataset.username);
+      else if (action === "refresh-creators") loadSuggestions();
+      else if (action === "remove-post-image") { $("#post-image-upload").value = ""; $("#post-image-preview").hidden = true; $("#post-image-preview").innerHTML = ""; }
+      else if (action === "hangup") hangup();
+      else if (!event.target.closest(".account-area,.mobile-header")) closeMenus();
+    });
     $("#global-search")?.addEventListener("keydown",e=>{if(e.key==="Enter"&&e.target.value.trim())location.assign(`/explorar/?q=${encodeURIComponent(e.target.value.trim())}`)});$("#page-content")?.addEventListener("click",e=>{const item=e.target.closest("[data-conversation]");if(item)openConversation(item.dataset.conversation)});
   }
 

@@ -13,6 +13,7 @@ class Post(models.Model):
         MUSIC = "music", "Música"
         PROCESS = "process", "Processo criativo"
         OPPORTUNITY = "opportunity", "Oportunidade"
+        DEVELOPMENT = "development", "Desenvolvimento"
         OTHER = "other", "Outros"
 
     author = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="posts")
@@ -22,6 +23,7 @@ class Post(models.Model):
     video_url = models.URLField(max_length=700, blank=True)
     portfolio_url = models.URLField(max_length=700, blank=True)
     tags = models.CharField(max_length=240, blank=True, help_text="Tags separadas por vírgula")
+    accepts_support = models.BooleanField(default=True)
     is_published = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True, db_index=True)
     updated_at = models.DateTimeField(auto_now=True)

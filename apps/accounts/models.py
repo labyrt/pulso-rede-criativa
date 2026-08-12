@@ -29,6 +29,7 @@ class Profile(models.Model):
         DESIGN = "design", "Design"
         TATTOO = "tattoo", "Tatuagem"
         CRAFTS = "crafts", "Artesanato"
+        DEVELOPMENT = "development", "Desenvolvimento"
         OTHER = "other", "Outra expressão"
 
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="profile")
@@ -38,6 +39,10 @@ class Profile(models.Model):
     cover_url = models.URLField(max_length=500, blank=True)
     location = models.CharField(max_length=100, blank=True)
     website = models.URLField(max_length=300, blank=True)
+    instagram_url = models.URLField(max_length=300, blank=True)
+    github_url = models.URLField(max_length=300, blank=True)
+    linkedin_url = models.URLField(max_length=300, blank=True)
+    behance_url = models.URLField(max_length=300, blank=True)
     specialty = models.CharField(max_length=32, choices=Specialty.choices, default=Specialty.OTHER)
     pronouns = models.CharField(max_length=32, blank=True)
     is_available_for_work = models.BooleanField(default=True)
@@ -59,7 +64,15 @@ class Profile(models.Model):
         return self.display_name or self.user.get_full_name() or self.user.username
 
     def clean(self):
-        for value in (self.avatar_url, self.cover_url, self.website):
+        for value in (
+            self.avatar_url,
+            self.cover_url,
+            self.website,
+            self.instagram_url,
+            self.github_url,
+            self.linkedin_url,
+            self.behance_url,
+        ):
             if value:
                 URLValidator(schemes=["https"])(value)
 
