@@ -1,0 +1,56 @@
+{% extends "webapp/base.html" %}
+{% block title %}PULSO — rede criativa{% endblock %}
+{% block section %}{{ section }}{% endblock %}
+{% block profile %}{{ profile_username }}{% endblock %}
+{% block content %}
+<div class="app-layout" id="app-shell">
+    <aside class="side-nav">
+        <a class="brand brand--dark" href="/app/"><span class="brand-mark"><i></i><i></i><i></i></span><b>PULSO</b></a>
+        <nav aria-label="Área principal">
+            <a href="/app/" data-nav="feed"><span>⌂</span><b>Meu pulso</b></a>
+            <a href="/explorar/" data-nav="explore"><span>⌁</span><b>Descobrir</b></a>
+            <a href="/mensagens/" data-nav="messages"><span>◫</span><b>Conversas</b><i id="message-badge"></i></a>
+            <a href="/notificacoes/" data-nav="notifications"><span>♢</span><b>Atividade</b><i id="notification-badge"></i></a>
+            <a href="/favoritos/" data-nav="bookmarks"><span>◇</span><b>Guardados</b></a>
+            <a href="#" data-action="my-profile"><span>◉</span><b>Meu espaço</b></a>
+        </nav>
+        <button class="button button--ink create-button" data-action="open-composer">Criar publicação <span>＋</span></button>
+        <div class="account-chip skeleton" id="account-chip"></div>
+    </aside>
+
+    <main class="content-column">
+        <header class="mobile-header"><a class="brand brand--dark" href="/app/">PULSO</a><button data-action="open-composer">＋</button></header>
+        <div id="page-content" class="page-content"><div class="page-loader"><i></i><span>Sentindo o pulso...</span></div></div>
+    </main>
+
+    <aside class="right-rail">
+        <label class="search-box"><span>⌕</span><input id="global-search" placeholder="Buscar criadores e ideias" autocomplete="off"></label>
+        <section class="rail-card"><div class="rail-title"><h3>Gente para conhecer</h3><button data-action="refresh-creators">↻</button></div><div id="creator-suggestions" class="suggestions"></div></section>
+        <section class="rail-card rail-card--dark"><span class="mini-label">PULSO LAB</span><h3>Uma ideia, várias formas.</h3><p>Use o assistente criativo para lapidar uma legenda sem perder a sua voz.</p><button class="text-button text-button--light" data-action="open-composer">Experimentar ↗</button></section>
+        <footer class="rail-footer"><a href="/api/docs/">API</a><a href="/seguranca/">Segurança</a><span>© 2026 PULSO</span></footer>
+    </aside>
+
+    <nav class="mobile-nav" aria-label="Navegação móvel">
+        <a href="/app/" data-nav="feed">⌂</a><a href="/explorar/" data-nav="explore">⌁</a><button data-action="open-composer">＋</button><a href="/mensagens/" data-nav="messages">◫</a><a href="#" data-action="my-profile">◉</a>
+    </nav>
+</div>
+
+<dialog class="modal composer-modal" id="composer-modal">
+    <form method="dialog" class="modal-card" id="post-form">
+        <header><div><span class="eyebrow">Novo pulso</span><h2>O que está criando?</h2></div><button class="icon-button" value="cancel" aria-label="Fechar">×</button></header>
+        <textarea name="body" id="post-body" maxlength="500" rows="6" placeholder="Mostre uma ideia, um processo ou uma oportunidade..."></textarea>
+        <div class="composer-grid">
+            <label>Expressão<select name="category"><option value="art">Arte</option><option value="photography">Fotografia</option><option value="beauty">Beleza</option><option value="design">Design</option><option value="fashion">Moda</option><option value="music">Música</option><option value="process">Processo criativo</option><option value="opportunity">Oportunidade</option><option value="other">Outros</option></select></label>
+            <label>Tags<input name="tags" placeholder="processo, retrato, brasil"></label>
+            <label>Imagem (URL HTTPS)<input name="image_url" type="url" placeholder="https://..."></label>
+            <label>Portfólio (opcional)<input name="portfolio_url" type="url" placeholder="https://..."></label>
+        </div>
+        <div class="ai-row"><button type="button" class="ai-button" data-action="ai-caption"><span>✦</span> Lapidar com assistente</button><small id="char-counter">0 / 500</small></div>
+        <footer><span class="privacy-note">A IA só recebe o texto quando você pede.</span><button type="submit" class="button button--ink">Publicar agora ↗</button></footer>
+    </form>
+</dialog>
+
+<dialog class="modal" id="profile-modal"><form method="dialog" class="modal-card" id="profile-form"></form></dialog>
+<dialog class="modal" id="support-modal"><div class="modal-card support-card" id="support-content"></div></dialog>
+<dialog class="modal call-modal" id="call-modal"><div class="call-stage" id="call-stage"><video id="remote-video" autoplay playsinline></video><video id="local-video" autoplay playsinline muted></video><div class="call-info"><span id="call-status">Conectando...</span><button class="hangup" data-action="hangup">×</button></div></div></dialog>
+{% endblock %}

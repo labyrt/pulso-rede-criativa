@@ -1,0 +1,38 @@
+services:
+  - type: web
+    name: pulso-rede-criativa
+    runtime: python
+    buildCommand: ./build.sh
+    startCommand: daphne -b 0.0.0.0 -p $PORT config.asgi:application
+    healthCheckPath: /health/
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.8
+      - key: DJANGO_SECRET_KEY
+        generateValue: true
+      - key: DJANGO_DEBUG
+        value: "False"
+      - key: DJANGO_ALLOWED_HOSTS
+        value: .onrender.com
+      - key: CSRF_TRUSTED_ORIGINS
+        value: https://*.onrender.com
+      - key: FIELD_ENCRYPTION_KEY
+        generateValue: true
+      - key: DATABASE_URL
+        fromDatabase:
+          name: pulso-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: pulso-cache
+          property: connectionString
+
+  - type: keyvalue
+    name: pulso-cache
+    ipAllowList: []
+
+databases:
+  - name: pulso-db
+    databaseName: pulso
+    user: pulso

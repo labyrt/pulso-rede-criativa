@@ -1,0 +1,21 @@
+{% load static %}
+<!doctype html>
+<html lang="pt-BR">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#0b0b0c">
+    <meta name="description" content="PULSO é a rede para criar, conectar e movimentar a economia criativa.">
+    <title>{% block title %}PULSO — rede criativa{% endblock %}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{% static 'webapp/styles.css' %}">
+    {% block head %}{% endblock %}
+</head>
+<body data-section="{% block section %}{% endblock %}" data-profile="{% block profile %}{% endblock %}">
+    {% block content %}{% endblock %}
+    <div class="toast-stack" id="toast-stack" aria-live="polite"></div>
+    <script src="{% static 'webapp/app.js' %}" defer></script>
+</body>
+</html>
