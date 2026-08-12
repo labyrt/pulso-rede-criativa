@@ -1,0 +1,36 @@
+{% extends "webapp/base.html" %}
+{% block title %}{% if mode == 'login' %}Entrar{% else %}Criar conta{% endif %} — PULSO{% endblock %}
+{% block section %}auth{% endblock %}
+{% block content %}
+<main class="auth-layout">
+    <section class="auth-art">
+        <a class="brand brand--light" href="/"><span class="brand-mark"><i></i><i></i><i></i></span>PULSO</a>
+        <div class="auth-statement"><span>PARA QUEM CRIA</span><h1>Ideias precisam<br>de <em>espaço.</em></h1><p>Encontre a sua gente. Mostre o que você faz. Faça acontecer.</p></div>
+        <div class="auth-shapes"><i></i><i></i><i></i></div>
+    </section>
+    <section class="auth-panel">
+        <div class="auth-box">
+            {% if mode == 'login' %}
+                <span class="eyebrow">Bem-vinda de volta</span><h2>Entre no seu espaço.</h2>
+                <form id="login-form" class="stack-form">
+                    <label>E-mail ou usuário<input name="identifier" autocomplete="username" required placeholder="voce@exemplo.com"></label>
+                    <label>Senha<input type="password" name="password" autocomplete="current-password" required placeholder="••••••••••"></label>
+                    <button class="button button--ink button--large" type="submit">Entrar <span>↗</span></button>
+                </form>
+                <p class="auth-switch">Ainda não tem espaço? <a href="/criar-conta/">Crie sua conta</a></p>
+            {% else %}
+                <span class="eyebrow">Chega mais</span><h2>Comece o seu espaço.</h2>
+                <form id="register-form" class="stack-form">
+                    <label>Como quer ser chamada?<input name="display_name" autocomplete="name" maxlength="80" required placeholder="Seu nome criativo"></label>
+                    <label>Nome de usuário<input name="username" autocomplete="username" maxlength="30" required placeholder="@sem espaços"></label>
+                    <label>E-mail<input type="email" name="email" autocomplete="email" required placeholder="voce@exemplo.com"></label>
+                    <label>Senha <small>mínimo de 10 caracteres</small><input type="password" name="password" autocomplete="new-password" minlength="10" required placeholder="Crie uma senha forte"></label>
+                    <button class="button button--ink button--large" type="submit">Criar meu espaço <span>↗</span></button>
+                </form>
+                <p class="auth-switch">Já faz parte? <a href="/entrar/">Entre aqui</a></p>
+            {% endif %}
+            <p class="form-error" id="form-error" role="alert"></p>
+        </div>
+    </section>
+</main>
+{% endblock %}

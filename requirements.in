@@ -1,0 +1,17 @@
+Django>=5.2,<5.3
+djangorestframework>=3.16,<3.17
+channels[daphne]>=4.2,<4.3
+channels-redis>=4.2,<4.3
+django-cors-headers>=4.7,<5
+django-filter>=25.1,<26
+drf-spectacular>=0.28,<0.29
+cryptography>=45,<46
+qrcode[pil]>=8.2,<9
+Pillow>=11.2,<12
+google-genai>=1.28,<2
+dj-database-url>=3,<4
+psycopg[binary]>=3.2,<4
+gunicorn>=23,<24
+whitenoise>=6.9,<7
+django-redis>=6,<7
+argon2-cffi>=25,<26

@@ -1,0 +1,19 @@
+{% extends "webapp/base.html" %}
+{% block title %}Segurança e privacidade — PULSO{% endblock %}
+{% block section %}security{% endblock %}
+{% block content %}
+<main class="legal-page wrap">
+    <a class="brand brand--dark" href="/"><span class="brand-mark"><i></i><i></i><i></i></span>PULSO</a>
+    <span class="eyebrow">Transparência por projeto</span>
+    <h1>Segurança não é<br>uma frase de marketing.</h1>
+    <p class="legal-lead">A PULSO reduz a coleta de dados, mantém segredos fora do navegador e aplica autorização no servidor. Esta página explica o que está protegido e os limites atuais do produto.</p>
+    <section class="legal-grid">
+        <article><span>01</span><h2>Contas</h2><p>Senhas passam por validação e são armazenadas com Argon2. Sessões usam cookies seguros e toda alteração pelo navegador exige CSRF.</p></article>
+        <article><span>02</span><h2>Mensagens</h2><p>O conteúdo é cifrado no banco e só pode ser consultado por participantes da conversa. Isso não é criptografia ponta a ponta: o servidor ainda realiza a decifragem.</p></article>
+        <article><span>03</span><h2>Pix</h2><p>A chave é cifrada no banco e vira QR Code apenas quando a criadora decide ativar o recurso. A PULSO não recebe, confirma ou custodia o dinheiro.</p></article>
+        <article><span>04</span><h2>IA</h2><p>A chave do provedor fica no backend. Somente o rascunho é enviado, e apenas depois de um clique explícito. Sem chave, o modo local continua funcionando.</p></article>
+    </section>
+    <div class="legal-note"><strong>Antes de um lançamento comercial</strong><p>O projeto ainda precisa de auditoria independente, política LGPD revisada juridicamente, moderação, backups testados, armazenamento de mídia gerenciado, observabilidade e infraestrutura TURN.</p></div>
+    <a class="button button--ink button--large" href="/">Voltar para a PULSO ↗</a>
+</main>
+{% endblock %}
