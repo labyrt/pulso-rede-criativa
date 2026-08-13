@@ -23,7 +23,7 @@ class RegisterView(generics.CreateAPIView):
     def create(self, request, *args, **kwargs):
         response = super().create(request, *args, **kwargs)
         user = User.objects.get(username=response.data["username"])
-        login(request, user)
+        login(request, user, backend="django.contrib.auth.backends.ModelBackend")
         return Response(PublicProfileSerializer(user.profile, context={"request": request}).data, status=status.HTTP_201_CREATED)
 
 

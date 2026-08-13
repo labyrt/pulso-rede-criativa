@@ -58,6 +58,7 @@ class AccountsAPITests(TestCase):
         self.client.force_authenticate(self.user)
         response = self.client.patch(reverse("me"), {"display_name": "Luna Nova"}, format="json")
         self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["id"], self.user.pk)
         self.assertEqual(response.data["display_name"], "Luna Nova")
 
     def test_password_update_hashes_value(self):

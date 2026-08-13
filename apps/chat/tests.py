@@ -36,3 +36,17 @@ class ChatAPITests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data["id"], self.conversation.pk)
         self.assertEqual(Conversation.objects.count(), 1)
+
+    def test_conversation_identifies_both_participants_unambiguously(self):
+        self.client.force_authenticate(self.user)
+        response = self.client.get("/api/v1/chat/conversations/")
+        self.assertEqual(response.status_code, 200)
+        participants = response.data["results"][0]["participants"]
+        self.assertEqual(
+            {participant["id"] for participant in participants},
+            {self.user.pk, self.other.pk},
+        )
+        self.assertEqual(
+            {participant["username"] for participant in participants},
+            {self.user.username, self.other.username},
+        )

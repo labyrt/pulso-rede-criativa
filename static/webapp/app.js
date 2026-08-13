@@ -5,6 +5,7 @@
   const section = body.dataset.section;
   const profileUsername = body.dataset.profile;
   const state = { me: null, conversations: [], socket: null, peer: null, localStream: null, activeConversation: null };
+  const previewUrls = new Map();
   const $ = (selector, root = document) => root.querySelector(selector);
   const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
   const escapeHtml = (value = "") => String(value).replace(/[&<>'"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[c]));
@@ -33,7 +34,13 @@
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
       const details = data.error?.details || data;
-      const message = details.detail || Object.values(details)[0]?.[0] || "Não foi possível concluir.";
+      const firstMessage = value => {
+        if (typeof value === "string") return value;
+        if (Array.isArray(value)) return value.map(firstMessage).find(Boolean);
+        if (value && typeof value === "object") return Object.values(value).map(firstMessage).find(Boolean);
+        return "";
+      };
+      const message = firstMessage(details) || "Não foi possível concluir.";
       throw new Error(message);
     }
     return data;
@@ -64,6 +71,47 @@
     const box = $("#form-error");
     if (box) box.textContent = error.message;
     else toast(error.message, "error");
+  }
+
+  function showFormError(form, error) {
+    const box = $(".modal-error", form);
+    if (box) {
+      box.textContent = error?.message || String(error);
+      box.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    } else toast(error?.message || String(error), "error");
+  }
+
+  function clearFormError(form) {
+    const box = $(".modal-error", form);
+    if (box) box.textContent = "";
+  }
+
+  function setSubmitting(form, active, loadingLabel) {
+    const button = $('button[type="submit"]', form);
+    if (!button) return;
+    button.disabled = active;
+    button.textContent = active ? loadingLabel : button.dataset.submitLabel;
+  }
+
+  function closeModal(id) {
+    const modal = $(`#${id}`);
+    if (modal?.open) modal.close();
+  }
+
+  function validateImageFile(file) {
+    const allowed = ["image/jpeg", "image/png", "image/webp"];
+    if (!allowed.includes(file.type)) throw new Error("Selecione uma imagem JPG, PNG ou WebP.");
+    if (file.size > 8 * 1024 * 1024) throw new Error("A imagem deve ter no máximo 8 MB.");
+  }
+
+  function renderImagePreview(file, container, options = {}) {
+    validateImageFile(file);
+    const previousUrl = previewUrls.get(container);
+    if (previousUrl) URL.revokeObjectURL(previousUrl);
+    const url = URL.createObjectURL(file);
+    previewUrls.set(container, url);
+    container.innerHTML = `<img src="${url}" alt="${escapeHtml(options.alt || "Prévia da imagem selecionada")}">${options.removable ? '<button type="button" data-action="remove-post-image">Remover</button>' : ""}`;
+    container.hidden = false;
   }
 
   async function initAuth() {
@@ -183,6 +231,12 @@
           <button data-post-action="bookmark" class="${post.is_bookmarked ? "active-bookmark" : ""}" aria-label="Guardar">${post.is_bookmarked ? "◆" : "◇"}</button>
           <button data-post-action="share" aria-label="Compartilhar">↗</button>
         </div>
+        <form class="inline-comment" data-comment-form hidden>
+          ${avatar(state.me)}
+          <label><span class="sr-only">Escreva um comentário</span><textarea name="body" maxlength="500" rows="1" placeholder="Deixe uma ideia, pergunta ou incentivo..." required></textarea></label>
+          <div class="inline-comment-actions"><button type="button" data-action="cancel-comment">Cancelar</button><button type="submit">Comentar ↗</button></div>
+          <p class="inline-comment-error" role="alert"></p>
+        </form>
         ${post.pix_enabled ? `<button class="post-support" data-action="support" data-username="${escapeHtml(post.author.username)}" data-post-id="${post.id}"><span>♡</span> Apoiar este trabalho via Pix</button>` : ""}
         ${comments ? `<div class="comment-preview">${comments}</div>` : ""}
       </div>
@@ -233,17 +287,47 @@
         return;
       }
       if (action === "comment") {
-        const text = prompt("Escreva seu comentário:");
-        if (!text?.trim()) return;
-        await api(`/api/v1/social/posts/${postId}/comments/`, { method:"POST", body:JSON.stringify({ body:text.trim() }) });
-        toast("Comentário publicado.", "success");
-        reloadSection();
+        const form = $("[data-comment-form]", card);
+        form.hidden = !form.hidden;
+        if (!form.hidden) $("textarea", form).focus();
         return;
       }
       const result = await api(`/api/v1/social/posts/${postId}/${action}/`, { method:"POST" });
       button.classList.toggle(action === "like" ? "active-like" : action === "bookmark" ? "active-bookmark" : "active-repost", result[`${action}d`] ?? result.liked ?? result.bookmarked ?? result.reposted);
       const count = $("span", button); if (count && result.count !== undefined) count.textContent = result.count;
     } catch (error) { toast(error.message, "error"); }
+  }
+
+  async function submitComment(form) {
+    const card = form.closest("[data-post]");
+    const textarea = $("textarea", form);
+    const errorBox = $(".inline-comment-error", form);
+    const submit = $('button[type="submit"]', form);
+    const body = textarea.value.trim();
+    if (!body) return;
+    errorBox.textContent = "";
+    submit.disabled = true;
+    submit.textContent = "Publicando...";
+    try {
+      const comment = await api(`/api/v1/social/posts/${card.dataset.post}/comments/`, { method:"POST", body:JSON.stringify({ body }) });
+      let preview = $(".comment-preview", card);
+      if (!preview) {
+        preview = document.createElement("div");
+        preview.className = "comment-preview";
+        card.children[1]?.append(preview);
+      }
+      preview.insertAdjacentHTML("afterbegin", `<p><strong>@${escapeHtml(comment.author.username)}</strong>${escapeHtml(comment.content || comment.body || body)}</p>`);
+      const count = $('[data-post-action="comment"] span', card);
+      if (count) count.textContent = String(Number(count.textContent || 0) + 1);
+      form.reset();
+      form.hidden = true;
+      toast("Comentário publicado.", "success");
+    } catch (error) {
+      errorBox.textContent = error.message;
+    } finally {
+      submit.disabled = false;
+      submit.textContent = "Comentar ↗";
+    }
   }
 
   async function loadProfile(username) {
@@ -256,9 +340,9 @@
         .filter(([field]) => profile[field])
         .map(([field,label]) => `<a class="social-link" href="${escapeHtml(profile[field])}" target="_blank" rel="noopener noreferrer">${label} ↗</a>`).join("");
       content.innerHTML = `<section class="profile-hero">
-        <div class="profile-cover" ${profile.cover_url ? `style="background-image:url('${escapeHtml(profile.cover_url)}')"` : ""}>${profile.is_own ? '<button class="media-edit media-edit--cover" data-action="edit-profile" aria-label="Alterar imagem de capa">✎ <span>Alterar capa</span></button>' : ""}</div>
+        <div class="profile-cover" ${profile.cover_url ? `style="background-image:url('${escapeHtml(profile.cover_url)}')"` : ""}>${profile.is_own ? '<button class="media-edit media-edit--cover" data-action="edit-cover" aria-label="Alterar apenas a imagem de capa">✎ <span>Alterar capa</span></button>' : ""}</div>
         <div class="profile-main">
-          <div class="profile-avatar">${profile.avatar_url ? `<img src="${escapeHtml(profile.avatar_url)}" alt="">` : initials(profile.display_name)}${profile.is_own ? '<button class="media-edit media-edit--avatar" data-action="edit-profile" aria-label="Alterar foto de perfil">✎</button>' : ""}</div>
+          <div class="profile-avatar">${profile.avatar_url ? `<img src="${escapeHtml(profile.avatar_url)}" alt="">` : initials(profile.display_name)}${profile.is_own ? '<button class="media-edit media-edit--avatar" data-action="edit-avatar" aria-label="Alterar apenas a foto de perfil">✎</button>' : ""}</div>
           <div class="profile-actions">
             ${profile.is_own ? '<button class="outline-button" data-action="edit-profile">Editar perfil</button>' : `<button class="outline-button" data-action="message-user" data-username="${escapeHtml(profile.username)}">Mensagem</button>${profile.pix_enabled ? `<button class="outline-button outline-button--pink" data-action="support" data-username="${escapeHtml(profile.username)}">Apoiar</button>` : ""}<button class="button button--ink" data-follow="${escapeHtml(profile.username)}">${profile.is_following ? "Seguindo" : "Seguir"}</button>`}
           </div>
@@ -294,17 +378,29 @@
     } catch (error) { $("#notifications").innerHTML = emptyState("!", "Não foi possível carregar.", error.message); }
   }
 
-  function openComposer() { $("#composer-modal")?.showModal(); }
+  function openComposer() {
+    const form = $("#post-form");
+    clearFormError(form);
+    $("#composer-modal")?.showModal();
+  }
 
   async function submitPost(event) {
     event.preventDefault();
     const form = event.currentTarget;
+    clearFormError(form);
+    const file = form.elements.image_upload.files[0];
+    if (file) {
+      try { validateImageFile(file); }
+      catch (error) { showFormError(form, error); return; }
+    }
+    setSubmitting(form, true, file ? "Enviando imagem..." : "Publicando...");
     try {
       const data = multipart(form);
       data.set("accepts_support", String(form.elements.accepts_support.checked));
       await api("/api/v1/social/posts/", { method:"POST", body:data });
       form.reset(); $("#post-image-preview").hidden = true; $("#post-image-preview").innerHTML = ""; $("#composer-modal").close(); toast("Seu trabalho entrou no pulso.", "success"); reloadSection();
-    } catch (error) { toast(error.message, "error"); }
+    } catch (error) { showFormError(form, error); }
+    finally { setSubmitting(form, false); }
   }
 
   async function aiCaption() {
@@ -322,10 +418,9 @@
 
   function profileForm() {
     const p = state.me;
-    return `<header><div><span class="eyebrow">Seu espaço</span><h2>Edite apenas o que quiser.</h2></div><button class="icon-button" value="cancel">×</button></header><div class="profile-fields">
+    return `<header class="modal-header"><div><span class="eyebrow">Seu espaço</span><h2>Edite apenas o que quiser.</h2></div><button type="button" class="icon-button" data-action="close-modal" data-modal="profile-modal" aria-label="Fechar editor de perfil">×</button></header><div class="modal-scroll"><div class="profile-fields">
       <label>Nome criativo<input name="display_name" value="${escapeHtml(p.display_name || "")}"></label><label>Usuário<input name="username" value="${escapeHtml(p.username)}"></label>
       <label class="wide">Bio<textarea name="bio" maxlength="220">${escapeHtml(p.bio || "")}</textarea></label>
-      <label class="upload-field">Foto de perfil<input type="file" name="avatar_upload" accept="image/jpeg,image/png,image/webp"><span>Escolher imagem · até 8 MB</span></label><label class="upload-field">Imagem de capa<input type="file" name="cover_upload" accept="image/jpeg,image/png,image/webp"><span>Escolher imagem · até 8 MB</span></label>
       <label>Localização<input name="location" value="${escapeHtml(p.location || "")}"></label><label>Portfólio<input type="url" name="website" value="${escapeHtml(p.website || "")}"></label>
       <label>Expressão<select name="specialty">${[["photography","Fotografia"],["nail-art","Nail art"],["hair","Cabelo"],["painting","Pintura"],["digital-art","Arte digital"],["fashion","Moda"],["music","Música"],["design","Design"],["tattoo","Tatuagem"],["crafts","Artesanato"],["development","Desenvolvimento"],["other","Outra expressão"]].map(([v,l]) => `<option value="${v}" ${p.specialty===v?"selected":""}>${l}</option>`).join("")}</select></label>
       <label>Nova senha <small>(opcional)</small><input type="password" name="password" minlength="10" autocomplete="new-password"></label>
@@ -333,30 +428,70 @@
       <label>Instagram<input type="url" name="instagram_url" value="${escapeHtml(p.instagram_url || "")}" placeholder="https://instagram.com/..."></label><label>GitHub<input type="url" name="github_url" value="${escapeHtml(p.github_url || "")}" placeholder="https://github.com/..."></label>
       <label>LinkedIn<input type="url" name="linkedin_url" value="${escapeHtml(p.linkedin_url || "")}" placeholder="https://linkedin.com/in/..."></label><label>Behance<input type="url" name="behance_url" value="${escapeHtml(p.behance_url || "")}" placeholder="https://behance.net/..."></label>
       <div class="divider">Apoio direto por Pix <small>— a chave é cifrada no banco</small></div>
-      <label>Tipo de chave<select name="pix_key_type"><option value="">Não alterar</option><option value="cpf">CPF</option><option value="email">E-mail</option><option value="phone">Celular</option><option value="random">Aleatória</option></select></label><label>Chave Pix<input name="pix_key" placeholder="Só preencha para alterar"></label>
-      <label>Nome do recebedor<input name="pix_receiver_name" maxlength="25" placeholder="Como consta no Pix"></label><label>Cidade<input name="pix_city" maxlength="15" placeholder="Sua cidade"></label>
+      <label>Tipo de chave<select name="pix_key_type"><option value="">Não alterar</option>${[["cpf","CPF"],["email","E-mail"],["phone","Celular"],["random","Aleatória"]].map(([v,l])=>`<option value="${v}" ${p.pix_key_type===v?"selected":""}>${l}</option>`).join("")}</select></label><label>Chave Pix<input name="pix_key" placeholder="Só preencha para alterar"></label>
+      <label>Nome do recebedor<input name="pix_receiver_name" maxlength="25" value="${escapeHtml(p.pix_receiver_name || "")}" placeholder="Como consta no Pix"></label><label>Cidade<input name="pix_city" maxlength="15" value="${escapeHtml(p.pix_city || "")}" placeholder="Sua cidade"></label>
       <label class="wide"><span><input type="checkbox" name="is_available_for_work" ${p.is_available_for_work ? "checked" : ""}> Disponível para trabalhos</span></label>
-    </div><footer><span class="privacy-note">Todos os campos são opcionais.</span><button class="button button--ink" type="submit">Salvar alterações</button></footer>`;
+    </div><p class="form-error modal-error" role="alert"></p></div><footer class="modal-footer"><span class="privacy-note">Foto e capa são alteradas pelos lápis do perfil.</span><button class="button button--ink" type="submit" data-submit-label="Salvar alterações">Salvar alterações</button></footer>`;
   }
 
   function openProfileEditor() { const form=$("#profile-form"); form.innerHTML=profileForm(); $("#profile-modal").showModal(); }
 
   async function submitProfile(event) {
     event.preventDefault();
-    const data = multipart(event.currentTarget);
-    data.set("is_available_for_work", String(event.currentTarget.elements.is_available_for_work.checked));
+    const form = event.currentTarget;
+    clearFormError(form);
+    const data = multipart(form);
+    data.set("is_available_for_work", String(form.elements.is_available_for_work.checked));
+    setSubmitting(form, true, "Salvando...");
     try {
       state.me = await api("/api/v1/auth/me/", { method:"PATCH", body:data });
       $("#profile-modal").close(); renderAccount(); toast("Perfil atualizado.", "success"); if (section === "profile") loadProfile(state.me.username);
-    } catch (error) { toast(error.message, "error"); }
+    } catch (error) { showFormError(form, error); }
+    finally { setSubmitting(form, false); }
   }
 
-  async function openSupport(username, postId = "") {
-    const modal=$("#support-modal"), box=$("#support-content"); box.innerHTML='<div class="page-loader"><i></i></div>'; modal.showModal();
+  function openProfileMedia(kind) {
+    const form = $("#profile-media-form");
+    form.reset();
+    clearFormError(form);
+    form.elements.media_kind.value = kind;
+    $("#profile-media-title").textContent = kind === "avatar" ? "Alterar foto de perfil" : "Alterar imagem de capa";
+    const preview = $("#profile-media-preview");
+    const currentUrl = kind === "avatar" ? state.me.avatar_url : state.me.cover_url;
+    preview.innerHTML = currentUrl ? `<img src="${escapeHtml(currentUrl)}" alt="Imagem atual">` : '<div class="media-placeholder">Sua prévia aparecerá aqui.</div>';
+    preview.hidden = false;
+    $("#profile-media-modal").showModal();
+  }
+
+  async function submitProfileMedia(event) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const file = form.elements.media_upload.files[0];
+    clearFormError(form);
+    if (!file) { showFormError(form, new Error("Selecione uma imagem antes de salvar.")); return; }
+    try { validateImageFile(file); }
+    catch (error) { showFormError(form, error); return; }
+    const kind = form.elements.media_kind.value;
+    const data = new FormData();
+    data.set(kind === "cover" ? "cover_upload" : "avatar_upload", file);
+    setSubmitting(form, true, "Enviando imagem...");
     try {
-      const data = await api(`/api/v1/support/${encodeURIComponent(username)}/pix/`);
-      box.innerHTML = `<header><div><span class="eyebrow">Apoio direto</span><h2>Apoie ${escapeHtml(data.creator)}.</h2></div><button class="icon-button" data-action="close-support">×</button></header><p>Escaneie no app do banco ou copie o código. O valor vai direto para a pessoa criadora; o PULSO não intermedeia o dinheiro.</p><div class="qr-wrap">${data.qr_svg}</div><div class="pix-code">${escapeHtml(data.payload)}</div><footer><button class="button button--ghost" data-action="copy-pix" data-payload="${escapeHtml(data.payload)}">Copiar código</button><button class="button button--ink" data-action="support-done" data-username="${escapeHtml(username)}" data-post-id="${escapeHtml(postId)}">Já apoiei ♡</button></footer>`;
-    } catch (error) { box.innerHTML = `<header><h2>Apoio indisponível.</h2><button class="icon-button" data-action="close-support">×</button></header><p>${escapeHtml(error.message)}</p>`; }
+      state.me = await api("/api/v1/auth/me/", { method:"PATCH", body:data });
+      closeModal("profile-media-modal");
+      renderAccount();
+      toast(kind === "cover" ? "Imagem de capa atualizada." : "Foto de perfil atualizada.", "success");
+      if (section === "profile") loadProfile(state.me.username);
+    } catch (error) { showFormError(form, error); }
+    finally { setSubmitting(form, false); }
+  }
+
+  async function openSupport(username, postId = "", amount = "") {
+    const modal=$("#support-modal"), box=$("#support-content"); box.innerHTML='<div class="page-loader"><i></i></div>'; if (!modal.open) modal.showModal();
+    try {
+      const query = amount ? `?amount=${encodeURIComponent(amount)}` : "";
+      const data = await api(`/api/v1/support/${encodeURIComponent(username)}/pix/${query}`);
+      box.innerHTML = `<header><div><span class="eyebrow">Apoio direto</span><h2>Apoie ${escapeHtml(data.creator)}.</h2></div><button type="button" class="icon-button" data-action="close-support">×</button></header><p>Escaneie no app do banco ou copie o código. O valor vai direto para a pessoa criadora; o PULSO não intermedeia o dinheiro.</p><div class="support-amount"><label>Valor opcional (R$)<input type="number" min="0.01" max="100000" step="0.01" value="${escapeHtml(amount)}" placeholder="25,00"></label><button type="button" data-action="refresh-pix" data-username="${escapeHtml(username)}" data-post-id="${escapeHtml(postId)}">Atualizar QR</button></div><div class="qr-wrap">${data.qr_svg}</div><div class="pix-code">${escapeHtml(data.payload)}</div><footer><button type="button" class="button button--ghost" data-action="copy-pix" data-payload="${escapeHtml(data.payload)}">Copiar código</button><button type="button" class="button button--ink" data-action="support-done" data-username="${escapeHtml(username)}" data-post-id="${escapeHtml(postId)}" data-amount="${escapeHtml(amount)}">Já apoiei ♡</button></footer>`;
+    } catch (error) { box.innerHTML = `<header><h2>Apoio indisponível.</h2><button type="button" class="icon-button" data-action="close-support">×</button></header><p>${escapeHtml(error.message)}</p>`; }
   }
 
   async function startConversation(username) {
@@ -368,13 +503,14 @@
     try { const data=await api("/api/v1/chat/conversations/?page_size=40"); state.conversations=data.results||data; renderConversations(); if (state.conversations[0]) openConversation(state.conversations[0].id); } catch(error){$("#conversation-items").innerHTML=`<p>${escapeHtml(error.message)}</p>`}
   }
 
-  function otherParticipant(conversation){ return conversation.participants.find(p=>p.id!==state.me.id)||conversation.participants[0]; }
+  function isMe(user){ return Boolean(user && state.me && ((state.me.id && user.id === state.me.id) || user.username === state.me.username)); }
+  function otherParticipant(conversation){ return conversation.participants.find(participant=>!isMe(participant))||conversation.participants[0]; }
   function renderConversations(){ const box=$("#conversation-items"); box.innerHTML=state.conversations.length?state.conversations.map(c=>{const other=otherParticipant(c);return `<div class="conversation-item" data-conversation="${c.id}">${avatar(other)}<div><strong>${escapeHtml(other.display_name)}</strong><small>${escapeHtml(c.last_message?.content||"Comece a conversa")}</small></div></div>`}).join(""):emptyState("◫","Nenhuma conversa ainda.","Visite um perfil e envie uma mensagem."); }
   async function openConversation(id){
     state.activeConversation=state.conversations.find(c=>c.id===Number(id)); if(!state.activeConversation)return; const other=otherParticipant(state.activeConversation); $$(".conversation-item").forEach(x=>x.classList.toggle("active",x.dataset.conversation==id)); $(".conversation-list").classList.add("hidden-mobile"); const panel=$("#chat-panel");panel.classList.add("open-mobile");panel.innerHTML=`<header class="chat-header">${avatar(other)}<div><strong>${escapeHtml(other.display_name)}</strong><small>@${escapeHtml(other.username)}</small></div><div class="call-actions"><button data-call="audio" title="Ligação de áudio">⌕</button><button data-call="video" title="Ligação de vídeo">▣</button></div></header><div class="message-stream" id="message-stream"></div><div class="typing-indicator" id="typing"></div><form class="chat-form" id="chat-form"><input maxlength="2000" autocomplete="off" placeholder="Escreva uma mensagem protegida..."><button>↗</button></form>`;
     const messages=await api(`/api/v1/chat/conversations/${id}/messages/`); const stream=$("#message-stream");stream.innerHTML=messages.map(messageBubble).join("");stream.scrollTop=stream.scrollHeight; connectSocket(id); $("#chat-form").addEventListener("submit",sendMessage);
   }
-  const messageBubble=m=>`<div class="message-bubble ${m.sender.id===state.me.id?"mine":""}">${escapeHtml(m.content||m.body)}<time>${formatDate(m.created_at)}</time></div>`;
+  const messageBubble=m=>`<div class="message-bubble ${isMe(m.sender)?"mine":""}" aria-label="Mensagem de ${escapeHtml(m.sender?.display_name || m.sender?.username || "participante")}">${escapeHtml(m.content||m.body)}<time>${formatDate(m.created_at)}</time></div>`;
   function connectSocket(id){ if(state.socket)state.socket.close(); const scheme=location.protocol==="https:"?"wss":"ws";state.socket=new WebSocket(`${scheme}://${location.host}/ws/chat/${id}/`);state.socket.onmessage=event=>{const data=JSON.parse(event.data);if(data.type==="message"){const stream=$("#message-stream");stream.insertAdjacentHTML("beforeend",messageBubble({...data.message,content:data.message.body}));stream.scrollTop=stream.scrollHeight}else if(data.type==="typing"){$("#typing").textContent=data.active?"digitando...":""}else if(data.type==="signal")handleSignal(data.signal)}; }
   function sendMessage(event){event.preventDefault();const input=$("input",event.currentTarget);const body=input.value.trim();if(!body||state.socket?.readyState!==1)return;state.socket.send(JSON.stringify({type:"message",body}));input.value=""}
 
@@ -389,15 +525,25 @@
   async function initApp(){
     activateNav(); try{state.me=await api("/api/v1/auth/me/");}catch(_){location.assign("/entrar/");return} renderAccount(); loadSuggestions();
     if(section==="feed")loadFeed(); else if(section==="explore")loadExplore(); else if(section==="bookmarks")loadBookmarks(); else if(section==="notifications")loadNotifications(); else if(section==="messages")loadMessages(); else if(section==="profile")loadProfile(profileUsername||state.me.username); else loadCreators();
-    $("#post-form")?.addEventListener("submit",submitPost); $("#profile-form")?.addEventListener("submit",submitProfile); $("#post-body")?.addEventListener("input",e=>$("#char-counter").textContent=`${e.target.value.length} / 500`);
+    $("#post-form")?.addEventListener("submit",submitPost); $("#profile-form")?.addEventListener("submit",submitProfile); $("#profile-media-form")?.addEventListener("submit",submitProfileMedia); $("#post-body")?.addEventListener("input",e=>$("#char-counter").textContent=`${e.target.value.length} / 500`);
     $("#post-image-upload")?.addEventListener("change", event => {
       const file = event.target.files[0];
       const preview = $("#post-image-preview");
       if (!file) { preview.hidden = true; preview.innerHTML = ""; return; }
-      if (file.size > 8 * 1024 * 1024) { event.target.value = ""; toast("A imagem deve ter no máximo 8 MB.", "error"); return; }
-      const url = URL.createObjectURL(file);
-      preview.innerHTML = `<img src="${url}" alt="Prévia da imagem selecionada"><button type="button" data-action="remove-post-image">Remover</button>`;
-      preview.hidden = false;
+      try { renderImagePreview(file, preview, { removable:true }); }
+      catch (error) { event.target.value = ""; showFormError($("#post-form"), error); }
+    });
+    $("#profile-media-upload")?.addEventListener("change", event => {
+      const file = event.target.files[0];
+      if (!file) return;
+      try { renderImagePreview(file, $("#profile-media-preview"), { alt:"Prévia da nova imagem do perfil" }); clearFormError($("#profile-media-form")); }
+      catch (error) { event.target.value = ""; showFormError($("#profile-media-form"), error); }
+    });
+    document.addEventListener("submit", event => {
+      const commentForm = event.target.closest("[data-comment-form]");
+      if (!commentForm) return;
+      event.preventDefault();
+      submitComment(commentForm);
     });
     document.addEventListener("click", async event => {
       const actionTarget = event.target.closest("[data-action]");
@@ -411,16 +557,22 @@
       else if (action === "open-composer") { closeMenus(); openComposer(); }
       else if (action === "ai-caption") aiCaption();
       else if (action === "edit-profile") { closeMenus(); openProfileEditor(); }
+      else if (action === "edit-avatar") openProfileMedia("avatar");
+      else if (action === "edit-cover") openProfileMedia("cover");
+      else if (action === "close-modal") closeModal(actionTarget.dataset.modal);
+      else if (action === "cancel-comment") { const form=actionTarget.closest("[data-comment-form]"); form.reset(); form.hidden=true; $(".inline-comment-error", form).textContent=""; }
       else if (action === "toggle-account-menu") toggleMenu("account-menu", actionTarget);
       else if (action === "toggle-mobile-menu") toggleMenu("mobile-account-menu", actionTarget);
       else if (action === "toggle-theme") { closeMenus(); toggleTheme(); }
       else if (action === "logout") { closeMenus(); await logoutUser(); }
       else if (action === "support") openSupport(actionTarget.dataset.username, actionTarget.dataset.postId || "");
+      else if (action === "refresh-pix") { const value=$(".support-amount input", $("#support-content")).value; openSupport(actionTarget.dataset.username, actionTarget.dataset.postId || "", value); }
       else if (action === "close-support") $("#support-modal").close();
       else if (action === "copy-pix") { await navigator.clipboard.writeText(actionTarget.dataset.payload); toast("Código Pix copiado.", "success"); }
       else if (action === "support-done") {
         const payload = { message: "Apoio iniciado via QR Code" };
         if (actionTarget.dataset.postId) payload.post = Number(actionTarget.dataset.postId);
+        if (actionTarget.dataset.amount) payload.amount = actionTarget.dataset.amount;
         await api(`/api/v1/support/${actionTarget.dataset.username}/intent/`, { method:"POST", body:JSON.stringify(payload) });
         $("#support-modal").close(); toast("Seu apoio faz a cultura circular ♡", "success");
       }
@@ -429,6 +581,9 @@
       else if (action === "remove-post-image") { $("#post-image-upload").value = ""; $("#post-image-preview").hidden = true; $("#post-image-preview").innerHTML = ""; }
       else if (action === "hangup") hangup();
       else if (!event.target.closest(".account-area,.mobile-header")) closeMenus();
+    });
+    $$("dialog.modal").forEach(modal => {
+      modal.addEventListener("click", event => { if (event.target === modal) modal.close(); });
     });
     $("#global-search")?.addEventListener("keydown",e=>{if(e.key==="Enter"&&e.target.value.trim())location.assign(`/explorar/?q=${encodeURIComponent(e.target.value.trim())}`)});$("#page-content")?.addEventListener("click",e=>{const item=e.target.closest("[data-conversation]");if(item)openConversation(item.dataset.conversation)});
   }
