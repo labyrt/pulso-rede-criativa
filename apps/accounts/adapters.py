@@ -1,10 +1,41 @@
 """Safe normalization for identities created by trusted OAuth providers."""
 
+from django.contrib.auth import get_user_model
+
 from allauth.socialaccount.adapter import DefaultSocialAccountAdapter
 
 
+User = get_user_model()
+TRUSTED_VERIFIED_EMAIL_LINK_PROVIDERS = {"github"}
+
+
 class PulsoSocialAccountAdapter(DefaultSocialAccountAdapter):
-    """Complete the public profile without auto-linking existing accounts."""
+    """Keep social login branded and safely reuse an existing local account."""
+
+    def pre_social_login(self, request, sociallogin):
+        """Connect GitHub only when it proves ownership of one existing e-mail.
+
+        PULSO accounts can be created by the local API, so they do not always
+        have an allauth ``EmailAddress`` row. Without this bridge, a person who
+        later signs in with the same verified GitHub e-mail is sent to the
+        generic allauth signup page instead of their existing PULSO account.
+        """
+
+        if sociallogin.is_existing:
+            return
+        if sociallogin.account.provider not in TRUSTED_VERIFIED_EMAIL_LINK_PROVIDERS:
+            return
+
+        verified_emails = {
+            address.email.strip().casefold()
+            for address in sociallogin.email_addresses
+            if getattr(address, "verified", False) and getattr(address, "email", "")
+        }
+        for email in verified_emails:
+            matches = list(User.objects.filter(email__iexact=email, is_active=True)[:2])
+            if len(matches) == 1:
+                sociallogin.connect(request, matches[0])
+                return
 
     def save_user(self, request, sociallogin, form=None):
         user = super().save_user(request, sociallogin, form)
