@@ -6,7 +6,7 @@ import hashlib
 import os
 import time
 from pathlib import Path
-from urllib.parse import unquote, urlparse
+from urllib.parse import unquote
 from uuid import uuid4
 
 import requests
@@ -42,22 +42,49 @@ def validate_image(uploaded_file):
 
 
 def _cloudinary_config():
+    """Return Cloudinary credentials while tolerating common dashboard copy formats.
+
+    Render stores only the value of CLOUDINARY_URL, but it is easy to paste
+    ``CLOUDINARY_URL=cloudinary://...`` or a quoted value by accident. Accept
+    those harmless wrappers without ever logging or exposing the secret.
+    """
+
     value = os.getenv("CLOUDINARY_URL", "").strip()
     if not value:
         return None
-    parsed = urlparse(value)
-    if parsed.scheme != "cloudinary" or not parsed.username or not parsed.password or not parsed.hostname:
+
+    if value.lower().startswith("export "):
+        value = value[7:].strip()
+    if value.upper().startswith("CLOUDINARY_URL="):
+        value = value.split("=", 1)[1].strip()
+    value = value.strip().strip('"').strip("'").strip()
+
+    prefix = "cloudinary://"
+    if not value.startswith(prefix):
         raise MediaUploadError("A configuração do armazenamento de imagens é inválida.")
-    return unquote(parsed.username), unquote(parsed.password), parsed.hostname
+
+    payload = value[len(prefix):]
+    credentials, separator, cloud_part = payload.rpartition("@")
+    api_key, key_separator, api_secret = credentials.partition(":")
+    cloud_name = cloud_part.split("?", 1)[0].split("/", 1)[0].strip()
+
+    if not separator or not key_separator or not api_key or not api_secret or not cloud_name:
+        raise MediaUploadError("A configuração do armazenamento de imagens é inválida.")
+
+    return unquote(api_key), unquote(api_secret), unquote(cloud_name)
 
 
 def _upload_to_cloudinary(uploaded_file, folder):
-    api_key, api_secret, cloud_name = _cloudinary_config()
+    config = _cloudinary_config()
+    if not config:
+        raise MediaUploadError("O armazenamento de imagens ainda não foi conectado.")
+    api_key, api_secret, cloud_name = config
     timestamp = int(time.time())
     public_id = uuid4().hex
     signed = f"folder=pulso/{folder}&public_id={public_id}&timestamp={timestamp}{api_secret}"
     signature = hashlib.sha1(signed.encode("utf-8"), usedforsecurity=False).hexdigest()
     try:
+        uploaded_file.seek(0)
         response = requests.post(
             f"https://api.cloudinary.com/v1_1/{cloud_name}/image/upload",
             data={
@@ -75,6 +102,8 @@ def _upload_to_cloudinary(uploaded_file, folder):
         if not secure_url.startswith("https://"):
             raise MediaUploadError("O serviço de mídia não retornou uma URL segura.")
         return secure_url
+    except MediaUploadError:
+        raise
     except (requests.RequestException, ValueError, KeyError) as exc:
         raise MediaUploadError("Não foi possível armazenar a imagem. Tente novamente.") from exc
 
