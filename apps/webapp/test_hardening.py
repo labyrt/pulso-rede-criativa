@@ -24,3 +24,10 @@ class ProductionHardeningTests(TestCase):
         self.assertIn("https://api.instagram.com", policy)
         self.assertIn("https://ims-na1.adobelogin.com", policy)
         self.assertNotIn("form-action *", policy)
+
+    def test_landing_hero_has_no_floating_connection_or_support_overlays(self):
+        response = self.client.get("/")
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "NOVA CONEXÃO")
+        self.assertNotContains(response, "APOIO RECEBIDO")
+        self.assertContains(response, "Seu trabalho")
