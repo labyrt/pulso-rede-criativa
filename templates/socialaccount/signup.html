@@ -1,4 +1,19 @@
 {% extends "webapp/base.html" %}
 {% block title %}Concluir acesso — PULSO{% endblock %}
 {% block section %}auth{% endblock %}
-{% block content %}<main class="oauth-page"><section class="oauth-card"><h1>Concluir acesso à PULSO</h1></section></main>{% endblock %}
+{% block content %}
+<main class="oauth-page">
+<section class="oauth-card">
+<a class="brand brand--dark" href="/">PULSO</a>
+<span class="eyebrow">Login social</span>
+<h1>Quase lá.</h1>
+<p>Confirme seus dados para concluir o acesso à PULSO.</p>
+<form method="post">
+{% csrf_token %}
+{{ form.as_p }}
+<button type="submit" class="button button--ink">Concluir acesso</button>
+</form>
+<a href="/entrar/">Voltar para entrar</a>
+</section>
+</main>
+{% endblock %}
