@@ -1,5 +1,5 @@
 class SecurityHeadersMiddleware:
-    """Strict browser policy with an explicit allow-list for creator media."""
+    """Strict browser policy with an explicit allow-list for creator media and OAuth."""
 
     def __init__(self, get_response):
         self.get_response = get_response
@@ -20,7 +20,16 @@ class SecurityHeadersMiddleware:
                     "frame-src https://www.youtube.com https://player.vimeo.com",
                     "object-src 'none'",
                     "base-uri 'self'",
-                    "form-action 'self'",
+                    (
+                        "form-action 'self' "
+                        "https://github.com "
+                        "https://accounts.google.com "
+                        "https://www.linkedin.com "
+                        "https://api.instagram.com "
+                        "https://www.instagram.com "
+                        "https://www.facebook.com "
+                        "https://ims-na1.adobelogin.com"
+                    ),
                     "frame-ancestors 'none'",
                 ]
             ),

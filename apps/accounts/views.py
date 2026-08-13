@@ -10,6 +10,7 @@ from rest_framework.views import APIView
 from apps.social.models import Notification
 from apps.webapp.throttles import AuthRateThrottle
 
+from .media_serializers import ProfileMediaUpdateSerializer
 from .models import Block, Follow, User
 from .serializers import ProfileUpdateSerializer, PublicProfileSerializer, RegisterSerializer, UserSummarySerializer
 
@@ -65,7 +66,9 @@ class MeView(APIView):
         return Response(PublicProfileSerializer(request.user.profile, context={"request": request}).data)
 
     def patch(self, request):
-        serializer = ProfileUpdateSerializer(request.user.profile, data=request.data, partial=True, context={"request": request})
+        has_media = any(field in request.FILES for field in ("avatar_upload", "cover_upload"))
+        serializer_class = ProfileMediaUpdateSerializer if has_media else ProfileUpdateSerializer
+        serializer = serializer_class(request.user.profile, data=request.data, partial=True, context={"request": request})
         serializer.is_valid(raise_exception=True)
         serializer.save()
         return Response(PublicProfileSerializer(request.user.profile, context={"request": request}).data)
