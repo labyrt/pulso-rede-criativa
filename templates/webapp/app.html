@@ -54,23 +54,39 @@
 </div>
 
 <dialog class="modal composer-modal" id="composer-modal">
-    <form method="dialog" class="modal-card" id="post-form">
-        <header><div><span class="eyebrow">Novo pulso</span><h2>O que está criando?</h2></div><button class="icon-button" value="cancel" aria-label="Fechar">×</button></header>
-        <textarea name="body" id="post-body" maxlength="500" rows="6" placeholder="Mostre uma ideia, um processo ou uma oportunidade..."></textarea>
-        <div class="composer-grid">
-            <label>Expressão<select name="category"><option value="art">Arte</option><option value="photography">Fotografia</option><option value="beauty">Beleza</option><option value="design">Design</option><option value="fashion">Moda</option><option value="music">Música</option><option value="development">Desenvolvimento</option><option value="process">Processo criativo</option><option value="opportunity">Oportunidade</option><option value="other">Outros</option></select></label>
-            <label>Tags<input name="tags" placeholder="processo, retrato, brasil"></label>
-            <label class="upload-field">Imagem do dispositivo<input name="image_upload" id="post-image-upload" type="file" accept="image/jpeg,image/png,image/webp"><span>Selecionar JPG, PNG ou WebP · até 8 MB</span></label>
-            <label>Portfólio (opcional)<input name="portfolio_url" type="url" placeholder="https://..."></label>
-            <label class="wide check-field"><span><input type="checkbox" name="accepts_support" checked> Exibir “Apoiar este trabalho” quando meu Pix estiver ativo</span></label>
+    <form class="modal-card" id="post-form">
+        <header class="modal-header"><div><span class="eyebrow">Novo pulso</span><h2 id="composer-title">O que está criando?</h2></div><button type="button" class="icon-button" data-action="close-modal" data-modal="composer-modal" aria-label="Fechar publicação">×</button></header>
+        <div class="modal-scroll">
+            <textarea name="body" id="post-body" maxlength="500" rows="6" placeholder="Mostre uma ideia, um processo ou uma oportunidade..."></textarea>
+            <div class="composer-grid">
+                <label>Expressão<select name="category"><option value="art">Arte</option><option value="photography">Fotografia</option><option value="beauty">Beleza</option><option value="design">Design</option><option value="fashion">Moda</option><option value="music">Música</option><option value="development">Desenvolvimento</option><option value="process">Processo criativo</option><option value="opportunity">Oportunidade</option><option value="other">Outros</option></select></label>
+                <label>Tags<input name="tags" placeholder="processo, retrato, brasil"></label>
+                <label class="upload-field">Imagem do dispositivo<input name="image_upload" id="post-image-upload" type="file" accept="image/jpeg,image/png,image/webp"><span>Selecionar JPG, PNG ou WebP · até 8 MB</span></label>
+                <label>Portfólio (opcional)<input name="portfolio_url" type="url" placeholder="https://..."></label>
+                <label class="wide check-field"><span><input type="checkbox" name="accepts_support" checked> Exibir “Apoiar este trabalho” quando meu Pix estiver ativo</span></label>
+            </div>
+            <div class="upload-preview" id="post-image-preview" hidden></div>
+            <div class="ai-row"><button type="button" class="ai-button" data-action="ai-caption"><span>✦</span> Lapidar com assistente</button><small id="char-counter">0 / 500</small></div>
+            <p class="form-error modal-error" role="alert"></p>
         </div>
-        <div class="upload-preview" id="post-image-preview" hidden></div>
-        <div class="ai-row"><button type="button" class="ai-button" data-action="ai-caption"><span>✦</span> Lapidar com assistente</button><small id="char-counter">0 / 500</small></div>
-        <footer><span class="privacy-note">A IA só recebe o texto quando você pede.</span><button type="submit" class="button button--ink">Publicar agora ↗</button></footer>
+        <footer class="modal-footer"><span class="privacy-note">A IA só recebe o texto quando você pede.</span><button type="submit" class="button button--ink" data-submit-label="Publicar agora ↗">Publicar agora ↗</button></footer>
     </form>
 </dialog>
 
-<dialog class="modal" id="profile-modal"><form method="dialog" class="modal-card" id="profile-form"></form></dialog>
+<dialog class="modal" id="profile-modal"><form class="modal-card" id="profile-form"></form></dialog>
+<dialog class="modal" id="profile-media-modal">
+    <form class="modal-card media-modal-card" id="profile-media-form">
+        <header class="modal-header"><div><span class="eyebrow">Imagem do seu espaço</span><h2 id="profile-media-title">Alterar imagem</h2></div><button type="button" class="icon-button" data-action="close-modal" data-modal="profile-media-modal" aria-label="Fechar editor de imagem">×</button></header>
+        <div class="modal-scroll">
+            <input type="hidden" name="media_kind" value="avatar">
+            <label class="upload-field media-upload-field">Escolha uma imagem do dispositivo<input name="media_upload" id="profile-media-upload" type="file" accept="image/jpeg,image/png,image/webp" required><span>Selecionar JPG, PNG ou WebP · até 8 MB</span></label>
+            <div class="upload-preview media-upload-preview" id="profile-media-preview"></div>
+            <p class="media-help">Você verá a prévia antes de salvar. O arquivo original não fica público: o backend valida o tipo e o tamanho antes do armazenamento.</p>
+            <p class="form-error modal-error" role="alert"></p>
+        </div>
+        <footer class="modal-footer"><span class="privacy-note">Envie apenas imagens que você tem autorização para usar.</span><button type="submit" class="button button--ink" data-submit-label="Salvar imagem">Salvar imagem</button></footer>
+    </form>
+</dialog>
 <dialog class="modal" id="support-modal"><div class="modal-card support-card" id="support-content"></div></dialog>
-<dialog class="modal call-modal" id="call-modal"><div class="call-stage" id="call-stage"><video id="remote-video" autoplay playsinline></video><video id="local-video" autoplay playsinline muted></video><div class="call-info"><span id="call-status">Conectando...</span><button class="hangup" data-action="hangup">×</button></div></div></dialog>
+<dialog class="modal call-modal" id="call-modal"><div class="call-stage" id="call-stage"><video id="remote-video" autoplay playsinline></video><video id="local-video" autoplay playsinline muted></video><div class="call-info"><span id="call-status">Conectando...</span><button type="button" class="hangup" data-action="hangup">×</button></div></div></dialog>
 {% endblock %}

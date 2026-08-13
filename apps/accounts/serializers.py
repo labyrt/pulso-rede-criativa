@@ -37,6 +37,7 @@ class RegisterSerializer(serializers.ModelSerializer):
 
 
 class PublicProfileSerializer(serializers.ModelSerializer):
+    id = serializers.IntegerField(source="user.id", read_only=True)
     username = serializers.CharField(source="user.username", read_only=True)
     display_name = serializers.CharField(source="name", read_only=True)
     followers_count = serializers.SerializerMethodField()
@@ -50,6 +51,7 @@ class PublicProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = Profile
         fields = (
+            "id",
             "username",
             "display_name",
             "bio",
@@ -65,6 +67,9 @@ class PublicProfileSerializer(serializers.ModelSerializer):
             "specialty_label",
             "pronouns",
             "is_available_for_work",
+            "pix_key_type",
+            "pix_receiver_name",
+            "pix_city",
             "followers_count",
             "following_count",
             "posts_count",

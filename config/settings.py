@@ -34,6 +34,15 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    "django.contrib.sites",
+    "allauth",
+    "allauth.account",
+    "allauth.socialaccount",
+    "allauth.socialaccount.providers.google",
+    "allauth.socialaccount.providers.github",
+    "allauth.socialaccount.providers.linkedin_oauth2",
+    "allauth.socialaccount.providers.instagram",
+    "allauth.socialaccount.providers.openid_connect",
     "rest_framework",
     "rest_framework.authtoken",
     "drf_spectacular",
@@ -55,6 +64,7 @@ MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "allauth.account.middleware.AccountMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "apps.webapp.middleware.SecurityHeadersMiddleware",
@@ -88,6 +98,11 @@ DATABASES = {
 }
 
 AUTH_USER_MODEL = "accounts.User"
+SITE_ID = 1
+AUTHENTICATION_BACKENDS = [
+    "django.contrib.auth.backends.ModelBackend",
+    "allauth.account.auth_backends.AuthenticationBackend",
+]
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
     {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator", "OPTIONS": {"min_length": 10}},
@@ -120,6 +135,44 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 LOGIN_URL = "/entrar/"
 LOGIN_REDIRECT_URL = "/app/"
 LOGOUT_REDIRECT_URL = "/"
+
+# Social login credentials stay in the deployment environment. A provider is
+# only exposed in the interface when both values are configured.
+def _social_app(client_id_env, secret_env, **extra):
+    client_id = os.getenv(client_id_env, "").strip()
+    secret = os.getenv(secret_env, "").strip()
+    if not (client_id and secret):
+        return None
+    return {"client_id": client_id, "secret": secret, **extra}
+
+
+SOCIALACCOUNT_PROVIDERS = {}
+for _provider, _client_env, _secret_env in (
+    ("google", "GOOGLE_OAUTH_CLIENT_ID", "GOOGLE_OAUTH_CLIENT_SECRET"),
+    ("github", "GITHUB_OAUTH_CLIENT_ID", "GITHUB_OAUTH_CLIENT_SECRET"),
+    ("linkedin_oauth2", "LINKEDIN_OAUTH_CLIENT_ID", "LINKEDIN_OAUTH_CLIENT_SECRET"),
+    ("instagram", "INSTAGRAM_OAUTH_CLIENT_ID", "INSTAGRAM_OAUTH_CLIENT_SECRET"),
+):
+    if _app := _social_app(_client_env, _secret_env):
+        SOCIALACCOUNT_PROVIDERS[_provider] = {"APPS": [_app]}
+
+if _adobe_app := _social_app(
+    "ADOBE_OAUTH_CLIENT_ID",
+    "ADOBE_OAUTH_CLIENT_SECRET",
+    provider_id="adobe",
+    name="Adobe / Behance",
+    settings={"server_url": "https://ims-na1.adobelogin.com"},
+):
+    SOCIALACCOUNT_PROVIDERS["openid_connect"] = {"APPS": [_adobe_app]}
+
+SOCIALACCOUNT_ADAPTER = "apps.accounts.adapters.PulsoSocialAccountAdapter"
+SOCIALACCOUNT_AUTO_SIGNUP = True
+SOCIALACCOUNT_QUERY_EMAIL = True
+SOCIALACCOUNT_EMAIL_AUTHENTICATION = False
+SOCIALACCOUNT_LOGIN_ON_GET = False
+ACCOUNT_LOGIN_METHODS = {"email", "username"}
+ACCOUNT_SIGNUP_FIELDS = ["email*", "username*"]
+ACCOUNT_EMAIL_VERIFICATION = "optional"
 
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [

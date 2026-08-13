@@ -6,7 +6,7 @@
 
 **Crie · conecte · colabore · apoie**
 
-[Aplicação online](#deploy) · [API Swagger](#api-rest) · [Arquitetura](#arquitetura) · [Segurança](#segurança-e-privacidade)
+[Aplicação online](https://pulso-rede-criativa.onrender.com) · [API Swagger](#api-rest) · [Arquitetura](#arquitetura) · [Segurança](#segurança-e-privacidade)
 
 </div>
 
@@ -21,6 +21,7 @@ Este é o projeto final do curso de Python da EBAC. Ele cumpre os requisitos de 
 ### Comunidade
 
 - cadastro e login por sessão segura;
+- login social preparado para Google, GitHub, LinkedIn, Instagram e Adobe/Behance, ativado apenas quando as credenciais oficiais existem no ambiente;
 - perfil editável com nome, senha, bio, upload de foto e capa, área criativa, localização, portfólio e redes sociais;
 - seguir/deixar de seguir, listas de seguidores e seguidos;
 - bloqueio de usuários com remoção automática das conexões;
@@ -32,7 +33,7 @@ Este é o projeto final do curso de Python da EBAC. Ele cumpre os requisitos de 
 
 ### Conversa e colaboração
 
-- conversas diretas privadas;
+- conversas diretas privadas com identificação inequívoca de remetente e destinatário;
 - mensagens em tempo real com Django Channels/WebSocket;
 - conteúdo das mensagens cifrado em repouso;
 - indicação de digitação e leitura;
@@ -42,7 +43,7 @@ Este é o projeto final do curso de Python da EBAC. Ele cumpre os requisitos de 
 ### Economia criativa e IA
 
 - chave Pix cifrada no perfil;
-- QR Code Pix Copia e Cola no perfil e em cada publicação que aceite apoio;
+- QR Code Pix Copia e Cola no perfil e em cada publicação que aceite apoio, com valor opcional;
 - transferência ocorre diretamente entre apoiador e criador: a PULSO não custodia valores;
 - assistente editorial de legendas com Gemini quando a chave está configurada;
 - fallback local funcional quando não há Gemini, sem quebrar o produto;
@@ -113,7 +114,7 @@ python manage.py test --verbosity 2
 python manage.py check --deploy
 ```
 
-A suíte cobre cadastro e senha, perfil parcial, criptografia do Pix, seguir/deixar de seguir, feed restrito, autorização de posts, validação, curtidas, comentários, favoritos, reposts, isolamento de conversas, criptografia de mensagens, QR Pix e fallback de IA.
+A suíte cobre cadastro e senha, perfil parcial, criptografia do Pix, seguir/deixar de seguir, feed restrito, autorização de posts, validação, curtidas, comentários, favoritos, reposts, identidade e isolamento de conversas, criptografia de mensagens, upload assinado no Cloudinary, QR Pix, login social e fallback de IA.
 
 ## API REST
 
@@ -150,6 +151,25 @@ Copie `.env.example` e ajuste as variáveis. Nunca envie o `.env` ao GitHub.
 | `CLOUDINARY_URL` | armazenamento persistente para uploads de imagens em produção |
 | `GEMINI_API_KEY` | habilita IA; é opcional e fica apenas no servidor |
 | `WEBRTC_TURN_*` | credenciais para chamadas em redes restritivas |
+| `GOOGLE_OAUTH_CLIENT_ID/SECRET` | login com Google |
+| `GITHUB_OAUTH_CLIENT_ID/SECRET` | login com GitHub |
+| `LINKEDIN_OAUTH_CLIENT_ID/SECRET` | login com LinkedIn |
+| `INSTAGRAM_OAUTH_CLIENT_ID/SECRET` | login com Instagram para contas elegíveis |
+| `ADOBE_OAUTH_CLIENT_ID/SECRET` | login Adobe ID para pessoas que usam Behance |
+
+### Ativando login social
+
+Crie um aplicativo OAuth em cada provedor desejado e registre os callbacks HTTPS abaixo. Os segredos ficam somente nas variáveis do Render; nunca no código, banco público ou JavaScript.
+
+| Provedor | Callback de produção |
+|---|---|
+| Google | `https://pulso-rede-criativa.onrender.com/accounts/google/login/callback/` |
+| GitHub | `https://pulso-rede-criativa.onrender.com/accounts/github/login/callback/` |
+| LinkedIn | `https://pulso-rede-criativa.onrender.com/accounts/linkedin_oauth2/login/callback/` |
+| Instagram | `https://pulso-rede-criativa.onrender.com/accounts/instagram/login/callback/` |
+| Adobe / Behance | `https://pulso-rede-criativa.onrender.com/accounts/oidc/adobe/login/callback/` |
+
+O Instagram restringe o acesso de API conforme o tipo e a aprovação do aplicativo. Adobe/Behance usa Adobe ID via OpenID Connect; não existe um login Behance independente no Django Allauth. Quando as credenciais de um provedor estão ausentes, o botão permanece visível, porém inativo, em vez de iniciar um fluxo quebrado.
 
 Gere uma chave Fernet com:
 
@@ -184,7 +204,7 @@ administrador, adicione temporariamente `DJANGO_SUPERUSER_USERNAME`,
 do serviço e faça um novo deploy. O `build.sh` cria a conta somente quando ela
 ainda não existe; depois do primeiro login, remova essas três variáveis.
 
-O link público será adicionado aqui após a criação do ambiente de produção.
+Produção: **https://pulso-rede-criativa.onrender.com**.
 
 ## Roadmap de produto
 
