@@ -87,6 +87,17 @@ class Command(BaseCommand):
 
             self._run_target(["migrate", "--noinput"], target_env)
             self._run_target(["flush", "--noinput"], target_env)
+            # django.contrib.sites recreates a default Site after flush. The source
+            # Site fixture must replace it so social-login relations preserve the
+            # exact production Site configuration.
+            self._run_target(
+                [
+                    "shell",
+                    "-c",
+                    "from django.contrib.sites.models import Site; Site.objects.all().delete()",
+                ],
+                target_env,
+            )
             self._run_target(["loaddata", str(fixture_path)], target_env)
             self._run_target(["migrate_render_to_neon", "--verify-manifest", str(manifest_path)], target_env)
             self._run_target(["check", "--deploy"], target_env, allow_nonzero=True)
