@@ -1,3 +1,6 @@
+import os
+from unittest.mock import patch
+
 from django.test import TestCase, override_settings
 
 
@@ -31,3 +34,19 @@ class ProductionHardeningTests(TestCase):
         self.assertNotContains(response, "NOVA CONEXÃO")
         self.assertNotContains(response, "APOIO RECEBIDO")
         self.assertContains(response, "Seu trabalho")
+
+    def test_maintenance_mode_blocks_normal_requests_without_cache(self):
+        with patch.dict(os.environ, {"PULSO_MAINTENANCE_MODE": "1"}):
+            response = self.client.get("/")
+
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(response.headers["Retry-After"], "120")
+        self.assertEqual(response.headers["Cache-Control"], "no-store")
+        self.assertEqual(response.headers["X-Robots-Tag"], "noindex")
+        self.assertIn("Content-Security-Policy", response.headers)
+
+    def test_health_endpoint_remains_available_during_maintenance(self):
+        with patch.dict(os.environ, {"PULSO_MAINTENANCE_MODE": "1"}):
+            response = self.client.get("/health/")
+
+        self.assertEqual(response.status_code, 200)
