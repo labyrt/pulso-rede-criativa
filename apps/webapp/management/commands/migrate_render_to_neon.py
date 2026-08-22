@@ -1,3 +1,4 @@
+import hashlib
 import json
 import os
 import subprocess
@@ -8,7 +9,7 @@ from urllib.parse import urlparse
 
 from django.apps import apps
 from django.core.management import BaseCommand, CommandError, call_command
-from django.db import connection
+from django.db import connection, transaction
 
 
 APP_LABELS = [
@@ -26,7 +27,7 @@ APP_LABELS = [
 
 
 class Command(BaseCommand):
-    help = "Safely copy PULSO production data from the current database to Neon and verify row counts."
+    help = "Safely copy PULSO production data from Render to Neon and verify counts and serialized content."
 
     def add_arguments(self, parser):
         parser.add_argument("--verify-manifest", default="")
@@ -64,22 +65,35 @@ class Command(BaseCommand):
         with tempfile.TemporaryDirectory(prefix="pulso-neon-migration-") as tmpdir:
             tmp = Path(tmpdir)
             fixture_path = tmp / "pulso-data.json"
+            target_fixture_path = tmp / "pulso-target-data.json"
             manifest_path = tmp / "manifest.json"
 
-            source_manifest = self._build_manifest()
-            manifest_path.write_text(json.dumps(source_manifest, ensure_ascii=False, indent=2), encoding="utf-8")
+            # The manifest and fixture must come from the exact same PostgreSQL
+            # snapshot. This prevents cross-table drift if production receives
+            # writes while the migration copy is being prepared.
+            with transaction.atomic(using="default"):
+                with connection.cursor() as cursor:
+                    cursor.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY")
 
-            self.stdout.write("Creating an ephemeral fixture from the Render database...")
-            call_command(
-                "dumpdata",
-                *APP_LABELS,
-                database="default",
-                natural_foreign=True,
-                natural_primary=True,
-                indent=2,
-                output=str(fixture_path),
-                verbosity=1,
-            )
+                source_manifest = self._build_manifest()
+                manifest_path.write_text(
+                    json.dumps(source_manifest, ensure_ascii=False, indent=2),
+                    encoding="utf-8",
+                )
+
+                self.stdout.write("Creating an ephemeral fixture from a consistent Render snapshot...")
+                call_command(
+                    "dumpdata",
+                    *APP_LABELS,
+                    database="default",
+                    natural_foreign=True,
+                    natural_primary=True,
+                    indent=2,
+                    output=str(fixture_path),
+                    verbosity=1,
+                )
+
+            source_fingerprint = self._fixture_fingerprint(fixture_path)
 
             target_env = os.environ.copy()
             target_env["DATABASE_URL"] = target_url
@@ -100,11 +114,29 @@ class Command(BaseCommand):
             )
             self._run_target(["loaddata", str(fixture_path)], target_env)
             self._run_target(["migrate_render_to_neon", "--verify-manifest", str(manifest_path)], target_env)
-            self._run_target(["check", "--deploy"], target_env, allow_nonzero=True)
+            self._run_target(
+                [
+                    "dumpdata",
+                    *APP_LABELS,
+                    "--database=default",
+                    "--natural-foreign",
+                    "--natural-primary",
+                    "--indent=2",
+                    f"--output={target_fixture_path}",
+                ],
+                target_env,
+            )
+
+            target_fingerprint = self._fixture_fingerprint(target_fixture_path)
+            if source_fingerprint != target_fingerprint:
+                raise CommandError("Database copy verification failed: serialized source and target data differ.")
+
+            self.stdout.write(self.style.SUCCESS("Serialized source/target verification passed."))
+            self._run_target(["check", "--deploy"], target_env)
 
         self.stdout.write(self.style.SUCCESS("PULSO_NEON_COPY_VERIFIED"))
 
-    def _run_target(self, manage_args, env, allow_nonzero=False):
+    def _run_target(self, manage_args, env):
         command = [sys.executable, "manage.py", *manage_args]
         self.stdout.write("Target: " + " ".join(manage_args))
         result = subprocess.run(command, env=env, text=True, capture_output=True)
@@ -112,7 +144,7 @@ class Command(BaseCommand):
             self.stdout.write(result.stdout.rstrip())
         if result.stderr:
             self.stderr.write(result.stderr.rstrip())
-        if result.returncode != 0 and not allow_nonzero:
+        if result.returncode != 0:
             raise CommandError(f"Target command failed: {' '.join(manage_args)}")
         return result
 
@@ -155,3 +187,18 @@ class Command(BaseCommand):
             raise CommandError("Database copy verification failed: " + details)
 
         self.stdout.write(self.style.SUCCESS("Target row-count verification passed for all migrated models."))
+
+    def _fixture_fingerprint(self, fixture_path):
+        try:
+            records = json.loads(fixture_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            raise CommandError("Could not read migration fixture for verification.") from exc
+        if not isinstance(records, list):
+            raise CommandError("Migration fixture has an unexpected format.")
+
+        canonical_records = sorted(
+            json.dumps(record, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
+            for record in records
+        )
+        payload = "\n".join(canonical_records).encode("utf-8")
+        return hashlib.sha256(payload).hexdigest()
