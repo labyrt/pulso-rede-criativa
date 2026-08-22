@@ -20,6 +20,7 @@ APP_LABELS = [
     "assistant",
     "webapp",
     "sites",
+    "sessions",
     "account",
     "socialaccount",
     "authtoken",
@@ -68,9 +69,6 @@ class Command(BaseCommand):
             target_fixture_path = tmp / "pulso-target-data.json"
             manifest_path = tmp / "manifest.json"
 
-            # The manifest and fixture must come from the exact same PostgreSQL
-            # snapshot. This prevents cross-table drift if production receives
-            # writes while the migration copy is being prepared.
             with transaction.atomic(using="default"):
                 with connection.cursor() as cursor:
                     cursor.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY")
@@ -101,9 +99,6 @@ class Command(BaseCommand):
 
             self._run_target(["migrate", "--noinput"], target_env)
             self._run_target(["flush", "--noinput"], target_env)
-            # django.contrib.sites recreates a default Site after flush. The source
-            # Site fixture must replace it so social-login relations preserve the
-            # exact production Site configuration.
             self._run_target(
                 [
                     "shell",
