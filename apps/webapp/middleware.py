@@ -1,11 +1,36 @@
+import os
+
+from django.http import HttpResponse
+
+
 class SecurityHeadersMiddleware:
-    """Strict browser policy with an explicit allow-list for creator media and OAuth."""
+    """Strict browser policy plus a deployment-controlled maintenance gate."""
 
     def __init__(self, get_response):
         self.get_response = get_response
 
     def __call__(self, request):
+        maintenance_enabled = os.getenv("PULSO_MAINTENANCE_MODE", "0").strip().lower() in {
+            "1",
+            "true",
+            "yes",
+            "on",
+        }
+        if maintenance_enabled and request.path != "/health/":
+            response = HttpResponse(
+                "PULSO está em manutenção por alguns minutos. Tente novamente em instantes.",
+                status=503,
+                content_type="text/plain; charset=utf-8",
+            )
+            response["Retry-After"] = "120"
+            response["Cache-Control"] = "no-store"
+            response["X-Robots-Tag"] = "noindex"
+            return self._secure(response)
+
         response = self.get_response(request)
+        return self._secure(response)
+
+    def _secure(self, response):
         response.setdefault(
             "Content-Security-Policy",
             "; ".join(
