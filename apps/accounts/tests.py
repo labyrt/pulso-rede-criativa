@@ -4,6 +4,7 @@ from unittest.mock import patch
 
 from allauth.account.models import EmailAddress
 from django.contrib.auth import get_user_model
+from django.core.cache import cache
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
 from django.urls import reverse
@@ -23,6 +24,7 @@ def uploaded_image(name="avatar.png"):
 
 class AccountsAPITests(TestCase):
     def setUp(self):
+        cache.clear()
         self.client = APIClient()
         self.user = User.objects.create_user(username="luna", email="luna@test.dev", password="VeryStrong!123")
         self.other = User.objects.create_user(username="sol", email="sol@test.dev", password="VeryStrong!123")
