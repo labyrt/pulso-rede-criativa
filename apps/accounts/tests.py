@@ -1,6 +1,8 @@
 from io import BytesIO
 import tempfile
+from unittest.mock import patch
 
+from allauth.account.models import EmailAddress
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
@@ -38,6 +40,55 @@ class AccountsAPITests(TestCase):
         self.assertEqual(response.data["display_name"], "Nova Criadora")
         self.assertNotIn("password", response.data)
         self.assertIn("_auth_user_id", self.client.session)
+
+    @override_settings(ACCOUNT_EMAIL_VERIFICATION="mandatory")
+    @patch("apps.accounts.views.send_email_confirmation")
+    def test_mandatory_verification_registers_without_logging_in(self, send_confirmation):
+        response = self.client.post(
+            reverse("register"),
+            {"username": "verificar", "email": "verificar@test.dev", "password": "AnotherStrong!123", "display_name": "Verificar"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 201)
+        self.assertTrue(response.data["requires_email_verification"])
+        self.assertNotIn("_auth_user_id", self.client.session)
+        user = User.objects.get(username="verificar")
+        send_confirmation.assert_called_once()
+        self.assertEqual(send_confirmation.call_args.args[1], user)
+
+    @override_settings(ACCOUNT_EMAIL_VERIFICATION="mandatory")
+    def test_mandatory_verification_blocks_login_until_email_is_verified(self):
+        response = self.client.post(
+            reverse("login"),
+            {"identifier": self.user.email, "password": "VeryStrong!123"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 403)
+        self.assertTrue(response.data["requires_email_verification"])
+        self.assertNotIn("_auth_user_id", self.client.session)
+
+        EmailAddress.objects.create(user=self.user, email=self.user.email, verified=True, primary=True)
+        response = self.client.post(
+            reverse("login"),
+            {"identifier": self.user.email, "password": "VeryStrong!123"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("_auth_user_id", self.client.session)
+
+    @override_settings(ACCOUNT_EMAIL_VERIFICATION="mandatory")
+    @patch("apps.accounts.views.send_email_confirmation")
+    def test_resend_verification_is_generic_and_rate_limited_endpoint(self, send_confirmation):
+        response = self.client.post(reverse("resend-verification"), {"email": self.user.email}, format="json")
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn(self.user.email, response.data["detail"])
+        send_confirmation.assert_called_once()
+
+        send_confirmation.reset_mock()
+        response = self.client.post(reverse("resend-verification"), {"email": "nobody@test.dev"}, format="json")
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn("nobody@test.dev", response.data["detail"])
+        send_confirmation.assert_not_called()
 
     def test_register_rejects_weak_password(self):
         response = self.client.post(reverse("register"), {"username": "weak", "email": "weak@test.dev", "password": "123", "display_name": "Weak"}, format="json")
