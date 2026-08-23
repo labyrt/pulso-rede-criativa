@@ -1,3 +1,8 @@
+import logging
+
+from allauth.account.models import EmailAddress
+from allauth.account.utils import send_email_confirmation
+from django.conf import settings
 from django.contrib.auth import authenticate, login, logout
 from django.db.models import Q
 from django.utils.decorators import method_decorator
@@ -15,6 +20,17 @@ from .models import Block, Follow, User
 from .serializers import ProfileUpdateSerializer, PublicProfileSerializer, RegisterSerializer, UserSummarySerializer
 
 
+logger = logging.getLogger(__name__)
+
+
+def _email_verification_required():
+    return settings.ACCOUNT_EMAIL_VERIFICATION == "mandatory"
+
+
+def _has_verified_primary_email(user):
+    return EmailAddress.objects.filter(user=user, email__iexact=user.email, verified=True).exists()
+
+
 @method_decorator(csrf_protect, name="dispatch")
 class RegisterView(generics.CreateAPIView):
     serializer_class = RegisterSerializer
@@ -24,6 +40,15 @@ class RegisterView(generics.CreateAPIView):
     def create(self, request, *args, **kwargs):
         response = super().create(request, *args, **kwargs)
         user = User.objects.get(username=response.data["username"])
+        if _email_verification_required():
+            send_email_confirmation(request._request, user, signup=True)
+            return Response(
+                {
+                    "requires_email_verification": True,
+                    "detail": "Conta criada. Confirme o link enviado ao seu e-mail antes de entrar.",
+                },
+                status=status.HTTP_201_CREATED,
+            )
         login(request, user, backend="django.contrib.auth.backends.ModelBackend")
         return Response(PublicProfileSerializer(user.profile, context={"request": request}).data, status=status.HTTP_201_CREATED)
 
@@ -43,8 +68,33 @@ class LoginView(APIView):
         user = authenticate(request, username=username, password=password)
         if not user or not user.is_active:
             return Response({"detail": "Credenciais inválidas."}, status=status.HTTP_400_BAD_REQUEST)
+        if _email_verification_required() and not _has_verified_primary_email(user):
+            return Response(
+                {"detail": "Confirme seu e-mail antes de entrar.", "requires_email_verification": True},
+                status=status.HTTP_403_FORBIDDEN,
+            )
         login(request, user)
         return Response(PublicProfileSerializer(user.profile, context={"request": request}).data)
+
+
+@method_decorator(csrf_protect, name="dispatch")
+class ResendVerificationView(APIView):
+    permission_classes = [permissions.AllowAny]
+    throttle_classes = [AuthRateThrottle]
+
+    def post(self, request):
+        email = request.data.get("email", "").strip().lower()
+        user = User.objects.filter(email__iexact=email, is_active=True).first() if email else None
+        if user and not _has_verified_primary_email(user):
+            try:
+                send_email_confirmation(request._request, user, signup=False)
+            except Exception:
+                # Do not reveal whether an address exists or provider delivery details.
+                logger.exception("Email verification resend failed")
+        return Response(
+            {"detail": "Se houver uma conta pendente para esse e-mail, enviaremos uma nova confirmação."},
+            status=status.HTTP_200_OK,
+        )
 
 
 class TokenLoginView(APIView):
@@ -128,7 +178,7 @@ class BlockView(APIView):
             return Response({"detail": "Ação inválida."}, status=status.HTTP_400_BAD_REQUEST)
         block, created = Block.objects.get_or_create(blocker=request.user, blocked=target)
         if created:
-            Follow.objects.filter(Q(follower=request.user, following=target) | Q(follower=target, following=request.user)).delete()
+            Follow.objects.filter(Q(follower=request.user, following=target) | Q(follower=target, blocked=request.user)).delete()
         else:
             block.delete()
         return Response({"blocked": created})
