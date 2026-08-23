@@ -15,3 +15,4 @@ gunicorn>=23,<24
 whitenoise>=6.9,<7
 django-redis>=6,<7
 argon2-cffi>=25,<26
+django-anymail>=15.1,<16
