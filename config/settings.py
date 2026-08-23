@@ -141,7 +141,7 @@ LOGOUT_REDIRECT_URL = "/"
 # only exposed in the interface when both values are configured.
 def _social_app(client_id_env, secret_env, **extra):
     client_id = os.getenv(client_id_env, "").strip()
-    secret = os.getenv(secret_id_env, "").strip() if False else os.getenv(secret_env, "").strip()
+    secret = os.getenv(secret_env, "").strip()
     if not (client_id and secret):
         return None
     return {"client_id": client_id, "secret": secret, **extra}
