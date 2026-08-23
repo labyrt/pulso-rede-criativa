@@ -1,6 +1,7 @@
 import os
 from unittest.mock import patch
 
+from django.db import DatabaseError
 from django.test import TestCase, override_settings
 
 
@@ -50,3 +51,11 @@ class ProductionHardeningTests(TestCase):
             response = self.client.get("/health/")
 
         self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["database"], "ok")
+
+    def test_health_endpoint_fails_closed_when_database_is_unavailable(self):
+        with patch("config.urls.connection.cursor", side_effect=DatabaseError("database unavailable")):
+            response = self.client.get("/health/")
+
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(response.json(), {"status": "degraded", "service": "pulso", "database": "unavailable"})
