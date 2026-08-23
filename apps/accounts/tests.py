@@ -42,7 +42,7 @@ class AccountsAPITests(TestCase):
         self.assertIn("_auth_user_id", self.client.session)
 
     @override_settings(ACCOUNT_EMAIL_VERIFICATION="mandatory")
-    @patch("apps.accounts.views.send_email_confirmation")
+    @patch("apps.accounts.views._send_email_confirmation")
     def test_mandatory_verification_registers_without_logging_in(self, send_confirmation):
         response = self.client.post(
             reverse("register"),
@@ -89,7 +89,7 @@ class AccountsAPITests(TestCase):
         self.assertIn("_auth_user_id", self.client.session)
 
     @override_settings(ACCOUNT_EMAIL_VERIFICATION="mandatory")
-    @patch("apps.accounts.views.send_email_confirmation")
+    @patch("apps.accounts.views._send_email_confirmation")
     def test_resend_verification_is_generic_and_rate_limited_endpoint(self, send_confirmation):
         response = self.client.post(reverse("resend-verification"), {"email": self.user.email}, format="json")
         self.assertEqual(response.status_code, 200)
