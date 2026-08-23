@@ -4,6 +4,7 @@ set -o errexit
 pip install -r requirements.txt
 python manage.py collectstatic --noinput
 python manage.py migrate
+python manage.py check_integrations
 
 # One-time, guarded Render -> Neon production data copy. This runs only when
 # explicitly enabled in the Render environment and leaves DATABASE_URL untouched.
