@@ -43,6 +43,7 @@ INSTALLED_APPS = [
     "allauth.socialaccount.providers.linkedin_oauth2",
     "allauth.socialaccount.providers.instagram",
     "allauth.socialaccount.providers.openid_connect",
+    "anymail",
     "rest_framework",
     "rest_framework.authtoken",
     "drf_spectacular",
@@ -165,6 +166,7 @@ if _adobe_app := _social_app(
 ):
     SOCIALACCOUNT_PROVIDERS["openid_connect"] = {"APPS": [_adobe_app]}
 
+RESEND_API_KEY = os.getenv("RESEND_API_KEY", "").strip()
 SOCIALACCOUNT_ADAPTER = "apps.accounts.adapters.PulsoSocialAccountAdapter"
 SOCIALACCOUNT_AUTO_SIGNUP = True
 SOCIALACCOUNT_QUERY_EMAIL = True
@@ -172,7 +174,11 @@ SOCIALACCOUNT_EMAIL_AUTHENTICATION = False
 SOCIALACCOUNT_LOGIN_ON_GET = False
 ACCOUNT_LOGIN_METHODS = {"email", "username"}
 ACCOUNT_SIGNUP_FIELDS = ["email*", "username*"]
-ACCOUNT_EMAIL_VERIFICATION = "optional"
+ACCOUNT_EMAIL_VERIFICATION = os.getenv(
+    "ACCOUNT_EMAIL_VERIFICATION",
+    "mandatory" if RESEND_API_KEY else "optional",
+)
+ACCOUNT_EMAIL_NOTIFICATIONS = bool(RESEND_API_KEY)
 
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
@@ -254,7 +260,12 @@ if not DEBUG:
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True
     SECURE_HSTS_PRELOAD = True
 
-EMAIL_BACKEND = os.getenv("EMAIL_BACKEND", "django.core.mail.backends.console.EmailBackend")
+if RESEND_API_KEY:
+    EMAIL_BACKEND = "anymail.backends.resend.EmailBackend"
+    ANYMAIL = {"RESEND_API_KEY": RESEND_API_KEY}
+else:
+    EMAIL_BACKEND = os.getenv("EMAIL_BACKEND", "django.core.mail.backends.console.EmailBackend")
+    ANYMAIL = {}
 DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "PULSO <contato@pulso.local>")
 
 LOGGING = {

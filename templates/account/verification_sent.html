@@ -1,0 +1,28 @@
+{% extends "webapp/base.html" %}
+{% load static %}
+{% block title %}Confirme seu e-mail — PULSO{% endblock %}
+{% block section %}auth{% endblock %}
+{% block head %}<script src="{% static 'webapp/email-verification.js' %}" defer></script>{% endblock %}
+{% block content %}
+<main class="auth-layout">
+    <section class="auth-art">
+        <a class="brand brand--light" href="/"><span class="brand-mark"><i></i><i></i><i></i></span>PULSO</a>
+        <div class="auth-statement"><span>FALTA UM PASSO</span><h1>Confirme seu<br><em>e-mail.</em></h1><p>Isso protege seu espaço e libera a recuperação segura da sua conta.</p></div>
+        <div class="auth-shapes"><i></i><i></i><i></i></div>
+    </section>
+    <section class="auth-panel">
+        <div class="auth-box">
+            <span class="eyebrow">Conta criada</span>
+            <h2>Confira sua caixa de entrada.</h2>
+            <p class="social-login-note">Enviamos um link de confirmação. Depois de confirmar, volte e entre normalmente no PULSO.</p>
+            <form id="resend-verification-form" class="stack-form">
+                {% csrf_token %}
+                <label>Não recebeu? Informe seu e-mail<input type="email" name="email" autocomplete="email" required placeholder="voce@exemplo.com"></label>
+                <button class="button button--ink button--large" type="submit">Reenviar confirmação <span>↗</span></button>
+            </form>
+            <p class="form-error" id="verification-status" role="status"></p>
+            <p class="auth-switch">Já confirmou? <a href="/entrar/">Entrar no PULSO</a></p>
+        </div>
+    </section>
+</main>
+{% endblock %}
