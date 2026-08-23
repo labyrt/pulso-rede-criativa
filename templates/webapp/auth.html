@@ -15,6 +15,7 @@
                 <form id="login-form" class="stack-form">
                     <label>E-mail ou usuário<input name="identifier" autocomplete="username" required placeholder="voce@exemplo.com"></label>
                     <label>Senha<input type="password" name="password" autocomplete="current-password" required placeholder="••••••••••"></label>
+                    <p class="auth-switch"><a href="{% url 'account_reset_password' %}">Esqueci minha senha</a></p>
                     <button class="button button--ink button--large" type="submit">Entrar <span>↗</span></button>
                 </form>
                 <p class="auth-switch">Ainda não tem espaço? <a href="/criar-conta/">Crie sua conta</a></p>
