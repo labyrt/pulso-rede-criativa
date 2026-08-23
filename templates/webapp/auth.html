@@ -1,6 +1,8 @@
 {% extends "webapp/base.html" %}
+{% load static %}
 {% block title %}{% if mode == 'login' %}Entrar{% else %}Criar conta{% endif %} — PULSO{% endblock %}
 {% block section %}auth{% endblock %}
+{% block head %}<script src="{% static 'webapp/auth-flow.js' %}" defer></script>{% endblock %}
 {% block content %}
 <main class="auth-layout">
     <section class="auth-art">
