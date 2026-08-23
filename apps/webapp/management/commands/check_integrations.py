@@ -17,6 +17,8 @@ class Command(BaseCommand):
             "adobe_oauth": "openid_connect" in providers,
             "cloudinary": bool(__import__("os").getenv("CLOUDINARY_URL", "").strip()),
             "field_encryption": bool(settings.FIELD_ENCRYPTION_KEY),
+            "transactional_email": bool(settings.RESEND_API_KEY),
+            "email_verification_mandatory": settings.ACCOUNT_EMAIL_VERIFICATION == "mandatory",
             "gemini": bool(settings.GEMINI_API_KEY),
             "turn": bool(settings.WEBRTC_TURN_URL),
         }
