@@ -1,7 +1,6 @@
 import logging
 
 from allauth.account.models import EmailAddress
-from allauth.account.utils import send_email_confirmation
 from django.conf import settings
 from django.contrib.auth import authenticate, login, logout
 from django.db.models import Q
@@ -28,20 +27,23 @@ def _email_verification_required():
 
 
 def _email_verification_allows_login(user):
-    """Require proof for new accounts without inventing proof for legacy users.
-
-    Accounts created before verified-email rollout have no allauth EmailAddress
-    record. They retain access. New local registrations create an EmailAddress
-    when confirmation is sent; if that row exists and is not verified, login is
-    blocked until the confirmation succeeds.
-    """
-
+    """Require proof for new accounts without inventing proof for legacy users."""
     address = EmailAddress.objects.filter(user=user, email__iexact=user.email).first()
     return address is None or address.verified
 
 
 def _has_verified_primary_email(user):
     return EmailAddress.objects.filter(user=user, email__iexact=user.email, verified=True).exists()
+
+
+def _send_email_confirmation(request, user, *, signup):
+    address = EmailAddress.objects.filter(user=user, email__iexact=user.email).first()
+    if address is None:
+        address = EmailAddress.objects.create(user=user, email=user.email, primary=True, verified=False)
+    elif not address.primary:
+        address.set_as_primary()
+    address.send_confirmation(request, signup=signup)
+    return address
 
 
 @method_decorator(csrf_protect, name="dispatch")
@@ -54,7 +56,7 @@ class RegisterView(generics.CreateAPIView):
         response = super().create(request, *args, **kwargs)
         user = User.objects.get(username=response.data["username"])
         if _email_verification_required():
-            send_email_confirmation(request._request, user, signup=True)
+            _send_email_confirmation(request._request, user, signup=True)
             return Response(
                 {
                     "requires_email_verification": True,
@@ -100,7 +102,7 @@ class ResendVerificationView(APIView):
         user = User.objects.filter(email__iexact=email, is_active=True).first() if email else None
         if user and not _has_verified_primary_email(user):
             try:
-                send_email_confirmation(request._request, user, signup=False)
+                _send_email_confirmation(request._request, user, signup=False)
             except Exception:
                 # Never reveal whether a submitted address maps to an account.
                 logger.exception("Email verification resend failed")
@@ -154,7 +156,7 @@ class DiscoverCreatorsView(generics.ListAPIView):
 
     def get_queryset(self):
         blocked = Block.objects.filter(blocker=self.request.user).values_list("blocked_id", flat=True)
-        return User.objects.select_related("profile").filter(is_active=True).exclude(pk=self.request.user.pk).exclude(pk__in=blocked).order_by("?")
+        return User.objects.select_related("profile").filter(user__is_active=True).exclude(pk=self.request.user.pk).exclude(pk__in=blocked).order_by("?")
 
 
 class FollowView(APIView):
