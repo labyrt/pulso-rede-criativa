@@ -156,7 +156,7 @@ class DiscoverCreatorsView(generics.ListAPIView):
 
     def get_queryset(self):
         blocked = Block.objects.filter(blocker=self.request.user).values_list("blocked_id", flat=True)
-        return User.objects.select_related("profile").filter(user__is_active=True).exclude(pk=self.request.user.pk).exclude(pk__in=blocked).order_by("?")
+        return User.objects.select_related("profile").filter(is_active=True).exclude(pk=self.request.user.pk).exclude(pk__in=blocked).order_by("?")
 
 
 class FollowView(APIView):
