@@ -59,3 +59,22 @@ class ProductionHardeningTests(TestCase):
 
         self.assertEqual(response.status_code, 503)
         self.assertEqual(response.json(), {"status": "degraded", "service": "pulso", "database": "unavailable"})
+
+    @override_settings(REDIS_URL="rediss://redis.example.invalid:6379")
+    def test_health_endpoint_fails_closed_when_redis_is_unavailable(self):
+        with patch("config.urls.cache.get", side_effect=ConnectionError("redis unavailable")):
+            response = self.client.get("/health/")
+
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(
+            response.json(),
+            {"status": "degraded", "service": "pulso", "database": "ok", "redis": "unavailable"},
+        )
+
+    @override_settings(REDIS_URL="rediss://redis.example.invalid:6379")
+    def test_health_endpoint_reports_redis_ready(self):
+        with patch("config.urls.cache.get", return_value=None):
+            response = self.client.get("/health/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["redis"], "ok")
