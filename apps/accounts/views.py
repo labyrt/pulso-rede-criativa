@@ -89,7 +89,7 @@ class ResendVerificationView(APIView):
             try:
                 send_email_confirmation(request._request, user, signup=False)
             except Exception:
-                # Do not reveal whether an address exists or provider delivery details.
+                # Never reveal whether a submitted address maps to an account.
                 logger.exception("Email verification resend failed")
         return Response(
             {"detail": "Se houver uma conta pendente para esse e-mail, enviaremos uma nova confirmação."},
@@ -178,7 +178,7 @@ class BlockView(APIView):
             return Response({"detail": "Ação inválida."}, status=status.HTTP_400_BAD_REQUEST)
         block, created = Block.objects.get_or_create(blocker=request.user, blocked=target)
         if created:
-            Follow.objects.filter(Q(follower=request.user, following=target) | Q(follower=target, blocked=request.user)).delete()
+            Follow.objects.filter(Q(follower=request.user, following=target) | Q(follower=target, following=request.user)).delete()
         else:
             block.delete()
         return Response({"blocked": created})
