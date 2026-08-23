@@ -10,12 +10,14 @@ from .views import (
     MeView,
     ProfileView,
     RegisterView,
+    ResendVerificationView,
     TokenLoginView,
 )
 
 urlpatterns = [
     path("register/", RegisterView.as_view(), name="register"),
     path("login/", LoginView.as_view(), name="login"),
+    path("resend-verification/", ResendVerificationView.as_view(), name="resend-verification"),
     path("logout/", LogoutView.as_view(), name="logout"),
     path("token/", TokenLoginView.as_view(), name="token"),
     path("me/", MeView.as_view(), name="me"),
