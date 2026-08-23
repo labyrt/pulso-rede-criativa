@@ -1,0 +1,31 @@
+{% extends "webapp/base.html" %}
+{% block title %}Confirmar e-mail — PULSO{% endblock %}
+{% block section %}auth{% endblock %}
+{% block content %}
+<main class="auth-layout">
+    <section class="auth-art">
+        <a class="brand brand--light" href="/"><span class="brand-mark"><i></i><i></i><i></i></span>PULSO</a>
+        <div class="auth-statement"><span>SEGURANÇA DO SEU ESPAÇO</span><h1>Um clique<br><em>e pronto.</em></h1><p>Confirme que este endereço de e-mail pertence a você.</p></div>
+        <div class="auth-shapes"><i></i><i></i><i></i></div>
+    </section>
+    <section class="auth-panel">
+        <div class="auth-box">
+            {% if confirmation %}
+                <span class="eyebrow">Confirmação de e-mail</span>
+                <h2>Ative seu espaço.</h2>
+                <p class="social-login-note">Confirme o endereço associado à sua conta para entrar no PULSO.</p>
+                <form method="post" action="{% url 'account_confirm_email' confirmation.key %}" class="stack-form">
+                    {% csrf_token %}
+                    <button class="button button--ink button--large" type="submit">Confirmar meu e-mail <span>↗</span></button>
+                </form>
+            {% else %}
+                <span class="eyebrow">Link indisponível</span>
+                <h2>Essa confirmação não é mais válida.</h2>
+                <p class="social-login-note">Solicite um novo link de confirmação para continuar.</p>
+                <a class="button button--ink button--large" href="{% url 'account_email_verification_sent' %}">Solicitar outro link <span>↗</span></a>
+            {% endif %}
+            <p class="auth-switch"><a href="/entrar/">Voltar para entrar</a></p>
+        </div>
+    </section>
+</main>
+{% endblock %}
