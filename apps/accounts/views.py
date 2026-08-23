@@ -27,6 +27,19 @@ def _email_verification_required():
     return settings.ACCOUNT_EMAIL_VERIFICATION == "mandatory"
 
 
+def _email_verification_allows_login(user):
+    """Require proof for new accounts without inventing proof for legacy users.
+
+    Accounts created before verified-email rollout have no allauth EmailAddress
+    record. They retain access. New local registrations create an EmailAddress
+    when confirmation is sent; if that row exists and is not verified, login is
+    blocked until the confirmation succeeds.
+    """
+
+    address = EmailAddress.objects.filter(user=user, email__iexact=user.email).first()
+    return address is None or address.verified
+
+
 def _has_verified_primary_email(user):
     return EmailAddress.objects.filter(user=user, email__iexact=user.email, verified=True).exists()
 
@@ -68,7 +81,7 @@ class LoginView(APIView):
         user = authenticate(request, username=username, password=password)
         if not user or not user.is_active:
             return Response({"detail": "Credenciais inválidas."}, status=status.HTTP_400_BAD_REQUEST)
-        if _email_verification_required() and not _has_verified_primary_email(user):
+        if _email_verification_required() and not _email_verification_allows_login(user):
             return Response(
                 {"detail": "Confirme seu e-mail antes de entrar.", "requires_email_verification": True},
                 status=status.HTTP_403_FORBIDDEN,
