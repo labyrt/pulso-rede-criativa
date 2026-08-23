@@ -57,7 +57,8 @@ class AccountsAPITests(TestCase):
         self.assertEqual(send_confirmation.call_args.args[1], user)
 
     @override_settings(ACCOUNT_EMAIL_VERIFICATION="mandatory")
-    def test_mandatory_verification_blocks_login_until_email_is_verified(self):
+    def test_mandatory_verification_blocks_pending_email_until_verified(self):
+        address = EmailAddress.objects.create(user=self.user, email=self.user.email, verified=False, primary=True)
         response = self.client.post(
             reverse("login"),
             {"identifier": self.user.email, "password": "VeryStrong!123"},
@@ -67,7 +68,18 @@ class AccountsAPITests(TestCase):
         self.assertTrue(response.data["requires_email_verification"])
         self.assertNotIn("_auth_user_id", self.client.session)
 
-        EmailAddress.objects.create(user=self.user, email=self.user.email, verified=True, primary=True)
+        address.verified = True
+        address.save(update_fields=["verified"])
+        response = self.client.post(
+            reverse("login"),
+            {"identifier": self.user.email, "password": "VeryStrong!123"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("_auth_user_id", self.client.session)
+
+    @override_settings(ACCOUNT_EMAIL_VERIFICATION="mandatory")
+    def test_legacy_account_without_emailaddress_keeps_access(self):
         response = self.client.post(
             reverse("login"),
             {"identifier": self.user.email, "password": "VeryStrong!123"},
