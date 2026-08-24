@@ -5,15 +5,22 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.accounts.models import Block, Follow
+from apps.accounts.serializers import UserSummarySerializer
+from apps.webapp.pagination import PulsoPagination
 from apps.webapp.throttles import PostRateThrottle
 
 from .models import Bookmark, Comment, Like, Notification, Post, Repost
 from .serializers import CommentSerializer, NotificationSerializer, PostSerializer
 
 
-def visible_posts_for(user):
+def hidden_user_ids(user):
     blocked = Block.objects.filter(blocker=user).values_list("blocked_id", flat=True)
     blocked_by = Block.objects.filter(blocked=user).values_list("blocker_id", flat=True)
+    return blocked, blocked_by
+
+
+def visible_posts_for(user):
+    blocked, blocked_by = hidden_user_ids(user)
     return (
         Post.objects.filter(is_published=True)
         .exclude(author_id__in=blocked)
@@ -57,6 +64,22 @@ class PostViewSet(viewsets.ModelViewSet):
         active = self._toggle(Like, request, post, Notification.Kind.LIKE)
         return Response({"liked": active, "count": post.likes.count()})
 
+    @action(detail=True, methods=["get"])
+    def likes(self, request, pk=None):
+        post = self.get_object()
+        blocked, blocked_by = hidden_user_ids(request.user)
+        likes = (
+            post.likes.select_related("user", "user__profile")
+            .exclude(user_id__in=blocked)
+            .exclude(user_id__in=blocked_by)
+            .order_by("-created_at")
+        )
+        paginator = PulsoPagination()
+        items = paginator.paginate_queryset(likes, request)
+        users = [item.user for item in items]
+        serializer = UserSummarySerializer(users, many=True, context={"request": request})
+        return paginator.get_paginated_response(serializer.data)
+
     @action(detail=True, methods=["post"])
     def bookmark(self, request, pk=None):
         post = self.get_object()
@@ -69,11 +92,29 @@ class PostViewSet(viewsets.ModelViewSet):
         active = self._toggle(Repost, request, post, Notification.Kind.REPOST)
         return Response({"reposted": active, "count": post.reposts.count()})
 
+    @action(detail=True, methods=["get"], url_path="comment-preview")
+    def comment_preview(self, request, pk=None):
+        post = self.get_object()
+        blocked, blocked_by = hidden_user_ids(request.user)
+        comments = (
+            post.comments.select_related("author", "author__profile")
+            .filter(parent__isnull=True)
+            .exclude(author_id__in=blocked)
+            .exclude(author_id__in=blocked_by)
+            .order_by("-created_at")[:2]
+        )
+        return Response(CommentSerializer(comments, many=True, context={"request": request}).data)
+
     @action(detail=True, methods=["get", "post"])
     def comments(self, request, pk=None):
         post = self.get_object()
         if request.method == "GET":
-            comments = post.comments.select_related("author", "author__profile")
+            blocked, blocked_by = hidden_user_ids(request.user)
+            comments = (
+                post.comments.select_related("author", "author__profile")
+                .exclude(author_id__in=blocked)
+                .exclude(author_id__in=blocked_by)
+            )
             return Response(CommentSerializer(comments, many=True, context={"request": request}).data)
         serializer = CommentSerializer(data=request.data, context={"request": request})
         serializer.is_valid(raise_exception=True)
@@ -102,8 +143,6 @@ class FeedView(APIView):
 
     @staticmethod
     def pagination_class():
-        from apps.webapp.pagination import PulsoPagination
-
         return PulsoPagination()
 
 
@@ -113,8 +152,6 @@ class ExploreView(APIView):
         category = request.query_params.get("category")
         if category:
             posts = posts.filter(category=category)
-        from apps.webapp.pagination import PulsoPagination
-
         paginator = PulsoPagination()
         items = paginator.paginate_queryset(posts, request)
         return paginator.get_paginated_response(PostSerializer(items, many=True, context={"request": request}).data)
