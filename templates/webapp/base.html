@@ -12,6 +12,7 @@
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="{% static 'webapp/styles.css' %}">
     <link rel="stylesheet" href="{% static 'webapp/hardening.css' %}">
+    <link rel="stylesheet" href="{% static 'webapp/social-interactions.css' %}">
     {% block head %}{% endblock %}
 </head>
 <body data-section="{% block section %}{% endblock %}" data-profile="{% block profile %}{% endblock %}">
@@ -19,5 +20,6 @@
     <div class="toast-stack" id="toast-stack" aria-live="polite"></div>
     <script src="{% static 'webapp/app.js' %}" defer></script>
     <script src="{% static 'webapp/hardening.js' %}" defer></script>
+    <script src="{% static 'webapp/social-interactions.js' %}" defer></script>
 </body>
 </html>
