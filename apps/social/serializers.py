@@ -104,7 +104,10 @@ class PostSerializer(serializers.ModelSerializer):
         return self._has(Repost, obj)
 
     def get_latest_comments(self, obj):
-        comments = obj.comments.select_related("author", "author__profile").filter(parent__isnull=True)
+        comments = obj.comments.select_related("author", "author__profile").filter(
+            parent__isnull=True,
+            author__profile__is_hidden=False,
+        )
         request = self.context.get("request")
         if request and request.user.is_authenticated:
             blocked = Block.objects.filter(blocker=request.user).values_list("blocked_id", flat=True)
