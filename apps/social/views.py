@@ -23,11 +23,18 @@ def visible_posts_for(user):
     blocked, blocked_by = hidden_user_ids(user)
     return (
         Post.objects.filter(is_published=True)
+        .filter(Q(author__profile__is_hidden=False) | Q(author=user))
         .exclude(author_id__in=blocked)
         .exclude(author_id__in=blocked_by)
         .select_related("author", "author__profile")
         .prefetch_related("likes", "reposts", "comments")
     )
+
+
+def visible_people_relation(queryset, request, user_field):
+    blocked, blocked_by = hidden_user_ids(request.user)
+    filters = {f"{user_field}__profile__is_hidden": False}
+    return queryset.filter(**filters).exclude(**{f"{user_field}_id__in": blocked}).exclude(**{f"{user_field}_id__in": blocked_by})
 
 
 class PostViewSet(viewsets.ModelViewSet):
@@ -62,18 +69,16 @@ class PostViewSet(viewsets.ModelViewSet):
     def like(self, request, pk=None):
         post = self.get_object()
         active = self._toggle(Like, request, post, Notification.Kind.LIKE)
-        return Response({"liked": active, "count": post.likes.count()})
+        return Response({"liked": active, "count": Like.objects.filter(post=post).count()})
 
     @action(detail=True, methods=["get"])
     def likes(self, request, pk=None):
         post = self.get_object()
-        blocked, blocked_by = hidden_user_ids(request.user)
-        likes = (
-            post.likes.select_related("user", "user__profile")
-            .exclude(user_id__in=blocked)
-            .exclude(user_id__in=blocked_by)
-            .order_by("-created_at")
-        )
+        likes = visible_people_relation(
+            post.likes.select_related("user", "user__profile"),
+            request,
+            "user",
+        ).order_by("-created_at")
         paginator = PulsoPagination()
         items = paginator.paginate_queryset(likes, request)
         users = [item.user for item in items]
@@ -90,30 +95,26 @@ class PostViewSet(viewsets.ModelViewSet):
     def repost(self, request, pk=None):
         post = self.get_object()
         active = self._toggle(Repost, request, post, Notification.Kind.REPOST)
-        return Response({"reposted": active, "count": post.reposts.count()})
+        return Response({"reposted": active, "count": Repost.objects.filter(post=post).count()})
 
     @action(detail=True, methods=["get"], url_path="comment-preview")
     def comment_preview(self, request, pk=None):
         post = self.get_object()
-        blocked, blocked_by = hidden_user_ids(request.user)
-        comments = (
-            post.comments.select_related("author", "author__profile")
-            .filter(parent__isnull=True)
-            .exclude(author_id__in=blocked)
-            .exclude(author_id__in=blocked_by)
-            .order_by("-created_at")[:2]
-        )
+        comments = visible_people_relation(
+            post.comments.select_related("author", "author__profile").filter(parent__isnull=True),
+            request,
+            "author",
+        ).order_by("-created_at")[:2]
         return Response(CommentSerializer(comments, many=True, context={"request": request}).data)
 
     @action(detail=True, methods=["get", "post"])
     def comments(self, request, pk=None):
         post = self.get_object()
         if request.method == "GET":
-            blocked, blocked_by = hidden_user_ids(request.user)
-            comments = (
-                post.comments.select_related("author", "author__profile")
-                .exclude(author_id__in=blocked)
-                .exclude(author_id__in=blocked_by)
+            comments = visible_people_relation(
+                post.comments.select_related("author", "author__profile"),
+                request,
+                "author",
             )
             return Response(CommentSerializer(comments, many=True, context={"request": request}).data)
         serializer = CommentSerializer(data=request.data, context={"request": request})
