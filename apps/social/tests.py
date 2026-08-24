@@ -8,7 +8,7 @@ from django.urls import reverse
 from PIL import Image
 from rest_framework.test import APIClient
 
-from apps.accounts.models import Follow
+from apps.accounts.models import Block, Follow
 
 from .models import Bookmark, Comment, Like, Post, Repost
 
@@ -78,10 +78,60 @@ class SocialAPITests(TestCase):
             self.client.post(f"/api/v1/social/posts/{self.followed_post.pk}/{action}/")
             self.assertFalse(model.objects.filter(user=self.user, post=self.followed_post).exists())
 
+    def test_likes_endpoint_returns_public_identity_and_avatar(self):
+        self.stranger.profile.display_name = "Noa Criativa"
+        self.stranger.profile.avatar_url = "https://example.com/noa.jpg"
+        self.stranger.profile.save(update_fields=["display_name", "avatar_url", "updated_at"])
+        Like.objects.create(user=self.stranger, post=self.followed_post)
+
+        response = self.client.get(f"/api/v1/social/posts/{self.followed_post.pk}/likes/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["count"], 1)
+        person = response.data["results"][0]
+        self.assertEqual(person["username"], "noa")
+        self.assertEqual(person["display_name"], "Noa Criativa")
+        self.assertEqual(person["avatar_url"], "https://example.com/noa.jpg")
+        self.assertNotIn("email", person)
+
+    def test_likes_endpoint_hides_blocked_people(self):
+        Like.objects.create(user=self.stranger, post=self.followed_post)
+        Block.objects.create(blocker=self.user, blocked=self.stranger)
+
+        response = self.client.get(f"/api/v1/social/posts/{self.followed_post.pk}/likes/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["count"], 0)
+        self.assertEqual(response.data["results"], [])
+
     def test_comment_is_created_for_post(self):
         response = self.client.post(f"/api/v1/social/posts/{self.followed_post.pk}/comments/", {"body": "Que trabalho lindo!"}, format="json")
         self.assertEqual(response.status_code, 201)
         self.assertTrue(Comment.objects.filter(author=self.user, post=self.followed_post).exists())
+
+    def test_comment_preview_contains_clickable_profile_identity_data(self):
+        self.stranger.profile.display_name = "Noa Criativa"
+        self.stranger.profile.avatar_url = "https://example.com/noa.jpg"
+        self.stranger.profile.save(update_fields=["display_name", "avatar_url", "updated_at"])
+        Comment.objects.create(author=self.stranger, post=self.followed_post, body="Lindo trabalho")
+
+        response = self.client.get(f"/api/v1/social/posts/{self.followed_post.pk}/comment-preview/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.data), 1)
+        author = response.data[0]["author"]
+        self.assertEqual(author["username"], "noa")
+        self.assertEqual(author["display_name"], "Noa Criativa")
+        self.assertEqual(author["avatar_url"], "https://example.com/noa.jpg")
+
+    def test_comment_preview_hides_blocked_people(self):
+        Comment.objects.create(author=self.stranger, post=self.followed_post, body="Comentário bloqueado")
+        Block.objects.create(blocker=self.user, blocked=self.stranger)
+
+        response = self.client.get(f"/api/v1/social/posts/{self.followed_post.pk}/comment-preview/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data, [])
 
     def test_unauthenticated_request_is_rejected(self):
         self.client.force_authenticate(None)
