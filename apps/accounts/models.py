@@ -1,6 +1,6 @@
 from django.contrib.auth.models import AbstractUser
 from django.core.exceptions import ValidationError
-from django.core.validators import URLValidator
+from django.core.validators import MaxValueValidator, MinValueValidator, URLValidator
 from django.db import models
 from django.db.models import F, Q
 
@@ -37,6 +37,16 @@ class Profile(models.Model):
     bio = models.CharField(max_length=220, blank=True)
     avatar_url = models.URLField(max_length=500, blank=True)
     cover_url = models.URLField(max_length=500, blank=True)
+    cover_position_y = models.PositiveSmallIntegerField(
+        default=50,
+        validators=[MinValueValidator(0), MaxValueValidator(100)],
+        help_text="Posição vertical da capa, de 0 (topo) a 100 (base).",
+    )
+    is_hidden = models.BooleanField(
+        default=False,
+        db_index=True,
+        help_text="Perfis ocultos não aparecem em descoberta, conexões, posts ou URLs públicas.",
+    )
     location = models.CharField(max_length=100, blank=True)
     website = models.URLField(max_length=300, blank=True)
     instagram_url = models.URLField(max_length=300, blank=True)

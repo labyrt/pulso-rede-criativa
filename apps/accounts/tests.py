@@ -27,6 +27,8 @@ class AccountsAPITests(TestCase):
 
     def test_profile_is_created_automatically(self):
         self.assertEqual(self.user.profile.name, "luna")
+        self.assertEqual(self.user.profile.cover_position_y, 50)
+        self.assertFalse(self.user.profile.is_hidden)
 
     def test_register_creates_secure_session(self):
         response = self.client.post(
@@ -61,6 +63,19 @@ class AccountsAPITests(TestCase):
         self.assertEqual(response.data["id"], self.user.pk)
         self.assertEqual(response.data["display_name"], "Luna Nova")
 
+    def test_cover_position_can_be_adjusted(self):
+        self.client.force_authenticate(self.user)
+        response = self.client.patch(reverse("me"), {"cover_position_y": 18}, format="json")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["cover_position_y"], 18)
+        self.user.profile.refresh_from_db()
+        self.assertEqual(self.user.profile.cover_position_y, 18)
+
+    def test_cover_position_rejects_out_of_range_value(self):
+        self.client.force_authenticate(self.user)
+        response = self.client.patch(reverse("me"), {"cover_position_y": 101}, format="json")
+        self.assertEqual(response.status_code, 400)
+
     def test_password_update_hashes_value(self):
         self.client.force_authenticate(self.user)
         response = self.client.patch(reverse("me"), {"password": "UpdatedStrong!456"}, format="json")
@@ -77,6 +92,47 @@ class AccountsAPITests(TestCase):
         self.assertFalse(response.data["following"])
         response = self.client.post(reverse("follow", kwargs={"username": self.user.username}))
         self.assertEqual(response.status_code, 400)
+
+    def test_connections_endpoints_list_followers_and_following(self):
+        third = User.objects.create_user(username="ceu", email="ceu@test.dev", password="VeryStrong!123")
+        Follow.objects.create(follower=self.user, following=self.other)
+        Follow.objects.create(follower=third, following=self.user)
+        self.client.force_authenticate(self.user)
+
+        following = self.client.get(reverse("connections", kwargs={"username": self.user.username, "kind": "following"}))
+        followers = self.client.get(reverse("connections", kwargs={"username": self.user.username, "kind": "followers"}))
+
+        self.assertEqual(following.status_code, 200)
+        self.assertEqual([item["username"] for item in following.data["results"]], ["sol"])
+        self.assertEqual(followers.status_code, 200)
+        self.assertEqual([item["username"] for item in followers.data["results"]], ["ceu"])
+
+    def test_hidden_profile_is_private_and_removed_from_connections(self):
+        hidden = User.objects.create_user(username="labyrt-adm", email="admin@test.dev", password="VeryStrong!123")
+        hidden.profile.is_hidden = True
+        hidden.profile.save(update_fields=["is_hidden", "updated_at"])
+        Follow.objects.create(follower=hidden, following=self.other)
+
+        self.client.force_authenticate(self.user)
+        hidden_profile = self.client.get(reverse("profile", kwargs={"username": hidden.username}))
+        followers = self.client.get(reverse("connections", kwargs={"username": self.other.username, "kind": "followers"}))
+        creators = self.client.get(reverse("creators"))
+
+        self.assertEqual(hidden_profile.status_code, 404)
+        self.assertNotIn("labyrt-adm", [item["username"] for item in followers.data["results"]])
+        self.assertNotIn("labyrt-adm", [item["username"] for item in creators.data["results"]])
+
+        self.client.force_authenticate(hidden)
+        own_profile = self.client.get(reverse("profile", kwargs={"username": hidden.username}))
+        self.assertEqual(own_profile.status_code, 200)
+        self.assertEqual(own_profile.data["username"], "labyrt-adm")
+
+    def test_hidden_profile_cannot_be_followed_by_username(self):
+        self.other.profile.is_hidden = True
+        self.other.profile.save(update_fields=["is_hidden", "updated_at"])
+        self.client.force_authenticate(self.user)
+        response = self.client.post(reverse("follow", kwargs={"username": self.other.username}))
+        self.assertEqual(response.status_code, 404)
 
     def test_pix_key_is_never_returned_and_is_encrypted(self):
         self.client.force_authenticate(self.user)

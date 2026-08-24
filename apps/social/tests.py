@@ -70,6 +70,17 @@ class SocialAPITests(TestCase):
         self.assertNotIn(self.stranger_post.pk, ids)
         self.assertNotIn(self.own_post.pk, ids)
 
+    def test_hidden_profile_posts_do_not_leak_into_feed_or_explore(self):
+        self.followed.profile.is_hidden = True
+        self.followed.profile.save(update_fields=["is_hidden", "updated_at"])
+        Follow.objects.create(follower=self.user, following=self.followed)
+
+        feed = self.client.get(reverse("feed"))
+        explore = self.client.get(reverse("explore"))
+
+        self.assertNotIn(self.followed_post.pk, [item["id"] for item in feed.data["results"]])
+        self.assertNotIn(self.followed_post.pk, [item["id"] for item in explore.data["results"]])
+
     def test_like_bookmark_and_repost_toggle(self):
         for action, model in (("like", Like), ("bookmark", Bookmark), ("repost", Repost)):
             response = self.client.post(f"/api/v1/social/posts/{self.followed_post.pk}/{action}/")
@@ -104,6 +115,17 @@ class SocialAPITests(TestCase):
         self.assertEqual(response.data["count"], 0)
         self.assertEqual(response.data["results"], [])
 
+    def test_likes_endpoint_hides_hidden_profile_identity(self):
+        self.stranger.profile.is_hidden = True
+        self.stranger.profile.save(update_fields=["is_hidden", "updated_at"])
+        Like.objects.create(user=self.stranger, post=self.followed_post)
+
+        response = self.client.get(f"/api/v1/social/posts/{self.followed_post.pk}/likes/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["count"], 0)
+        self.assertEqual(response.data["results"], [])
+
     def test_comment_is_created_for_post(self):
         response = self.client.post(f"/api/v1/social/posts/{self.followed_post.pk}/comments/", {"body": "Que trabalho lindo!"}, format="json")
         self.assertEqual(response.status_code, 201)
@@ -127,6 +149,16 @@ class SocialAPITests(TestCase):
     def test_comment_preview_hides_blocked_people(self):
         Comment.objects.create(author=self.stranger, post=self.followed_post, body="Comentário bloqueado")
         Block.objects.create(blocker=self.user, blocked=self.stranger)
+
+        response = self.client.get(f"/api/v1/social/posts/{self.followed_post.pk}/comment-preview/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data, [])
+
+    def test_comment_preview_hides_hidden_profile(self):
+        self.stranger.profile.is_hidden = True
+        self.stranger.profile.save(update_fields=["is_hidden", "updated_at"])
+        Comment.objects.create(author=self.stranger, post=self.followed_post, body="Comentário interno")
 
         response = self.client.get(f"/api/v1/social/posts/{self.followed_post.pk}/comment-preview/")
 

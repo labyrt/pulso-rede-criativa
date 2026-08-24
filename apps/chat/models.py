@@ -26,6 +26,10 @@ class Message(models.Model):
 
     class Meta:
         ordering = ["created_at"]
+        indexes = [
+            models.Index(fields=["conversation", "-created_at"], name="chat_conv_recent_idx"),
+            models.Index(fields=["conversation", "read_at"], name="chat_conv_read_idx"),
+        ]
 
     @property
     def body(self):
