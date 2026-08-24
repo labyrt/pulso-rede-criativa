@@ -1,9 +1,11 @@
-from channels.db import database_sync_to_async
-from channels.generic.websocket import AsyncJsonWebsocketConsumer
-from django.utils import timezone
 from collections import deque
 from time import monotonic
 
+from channels.db import database_sync_to_async
+from channels.generic.websocket import AsyncJsonWebsocketConsumer
+from django.utils import timezone
+
+from apps.accounts.models import User
 from apps.social.models import Notification
 
 from .models import Conversation, Message
@@ -32,7 +34,7 @@ class ConversationConsumer(AsyncJsonWebsocketConsumer):
             while self.message_times and now - self.message_times[0] > 60:
                 self.message_times.popleft()
             if len(self.message_times) >= 30:
-                await self.send_json({"type": "error", "message": "Muitas mensagens em pouco tempo. Respire e tente novamente."})
+                await self.send_json({"type": "error", "message": "Muitas mensagens em pouco tempo. Aguarde alguns instantes e tente novamente."})
                 return
             self.message_times.append(now)
             body = str(content.get("body", "")).strip()
@@ -84,13 +86,15 @@ class ConversationConsumer(AsyncJsonWebsocketConsumer):
     @database_sync_to_async
     def _save_message(self, user_id, body):
         conversation = Conversation.objects.get(pk=self.conversation_id)
-        message = Message(conversation=conversation, sender_id=user_id)
+        sender = User.objects.select_related("profile").get(pk=user_id)
+        message = Message(conversation=conversation, sender=sender)
         message.set_body(body)
         message.save()
         Conversation.objects.filter(pk=conversation.pk).update(updated_at=timezone.now())
-        sender = message.sender
-        for recipient in conversation.participants.exclude(pk=user_id):
-            Notification.objects.create(recipient=recipient, actor=sender, kind=Notification.Kind.MESSAGE)
+        recipients = conversation.participants.exclude(pk=user_id).only("pk")
+        Notification.objects.bulk_create(
+            [Notification(recipient=recipient, actor=sender, kind=Notification.Kind.MESSAGE) for recipient in recipients]
+        )
         return {
             "id": message.pk,
             "body": message.body,
