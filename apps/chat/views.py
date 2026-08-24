@@ -1,5 +1,5 @@
 from django.conf import settings
-from django.db.models import Count
+from django.db.models import Count, Prefetch, Q
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import status, viewsets
@@ -18,21 +18,31 @@ class ConversationViewSet(viewsets.ModelViewSet):
     http_method_names = ["get", "post", "head", "options"]
 
     def get_queryset(self):
-        return Conversation.objects.filter(participants=self.request.user).prefetch_related("participants", "participants__profile")
+        latest_message = Message.objects.select_related("sender", "sender__profile").order_by("-created_at")[:1]
+        return (
+            Conversation.objects.filter(participants=self.request.user)
+            .annotate(
+                _unread_count=Count(
+                    "messages",
+                    filter=Q(messages__read_at__isnull=True) & ~Q(messages__sender=self.request.user),
+                    distinct=True,
+                )
+            )
+            .prefetch_related(
+                "participants",
+                "participants__profile",
+                Prefetch("messages", queryset=latest_message, to_attr="_latest_message"),
+            )
+        )
 
     def create(self, request, *args, **kwargs):
         username = request.data.get("username", "").strip().lower()
-        target = get_object_or_404(User, username=username, is_active=True)
+        target = get_object_or_404(User.objects.select_related("profile"), username=username, is_active=True, profile__is_hidden=False)
         if target == request.user:
             return Response({"detail": "Escolha outra pessoa."}, status=status.HTTP_400_BAD_REQUEST)
         if Block.objects.filter(blocker__in=[request.user, target], blocked__in=[request.user, target]).exists():
             return Response({"detail": "Conversa indisponível."}, status=status.HTTP_403_FORBIDDEN)
-        candidate = (
-            Conversation.objects.filter(participants=request.user)
-            .filter(participants=target)
-            .distinct()
-            .first()
-        )
+        candidate = Conversation.objects.filter(participants=request.user).filter(participants=target).distinct().first()
         if candidate:
             conversation = candidate
             created = False
@@ -43,13 +53,37 @@ class ConversationViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(conversation)
         return Response(serializer.data, status=status.HTTP_201_CREATED if created else status.HTTP_200_OK)
 
+    @staticmethod
+    def _message_limit(request):
+        try:
+            requested = int(request.query_params.get("limit", 60))
+        except (TypeError, ValueError):
+            requested = 60
+        return max(20, min(requested, 100))
+
     @action(detail=True, methods=["get", "post"])
     def messages(self, request, pk=None):
         conversation = self.get_object()
         if request.method == "GET":
             conversation.messages.exclude(sender=request.user).filter(read_at__isnull=True).update(read_at=timezone.now())
-            messages = conversation.messages.select_related("sender", "sender__profile")[:200]
-            return Response(MessageSerializer(messages, many=True, context={"request": request}).data)
+            limit = self._message_limit(request)
+            messages = conversation.messages.select_related("sender", "sender__profile").order_by("-created_at")
+            before = request.query_params.get("before")
+            if before:
+                try:
+                    messages = messages.filter(pk__lt=int(before))
+                except (TypeError, ValueError):
+                    return Response({"detail": "Referência de mensagem inválida."}, status=status.HTTP_400_BAD_REQUEST)
+            chunk = list(messages[: limit + 1])
+            has_more = len(chunk) > limit
+            chunk = chunk[:limit]
+            chunk.reverse()
+            response = Response(MessageSerializer(chunk, many=True, context={"request": request}).data)
+            response["X-Has-More"] = "1" if has_more else "0"
+            if chunk:
+                response["X-Oldest-Message"] = str(chunk[0].pk)
+            return response
+
         serializer = MessageSerializer(data=request.data, context={"request": request})
         serializer.is_valid(raise_exception=True)
         message = serializer.save(conversation=conversation, sender=request.user)
