@@ -33,10 +33,17 @@ class ConversationSerializer(serializers.ModelSerializer):
         fields = ("id", "participants", "last_message", "unread_count", "created_at", "updated_at")
 
     def get_last_message(self, obj):
-        message = obj.messages.select_related("sender", "sender__profile").last()
+        prefetched = getattr(obj, "_latest_message", None)
+        if prefetched is not None:
+            message = prefetched[0] if prefetched else None
+        else:
+            message = obj.messages.select_related("sender", "sender__profile").last()
         return MessageSerializer(message, context=self.context).data if message else None
 
     def get_unread_count(self, obj):
+        annotated = getattr(obj, "_unread_count", None)
+        if annotated is not None:
+            return annotated
         request = self.context.get("request")
         return obj.messages.exclude(sender=request.user).filter(read_at__isnull=True).count() if request else 0
 
