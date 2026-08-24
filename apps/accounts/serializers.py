@@ -5,7 +5,7 @@ from rest_framework import serializers
 
 from apps.common.media import MediaUploadError, store_image
 
-from .models import Follow, Profile, User
+from .models import Block, Follow, Profile, User
 
 
 class RegisterSerializer(serializers.ModelSerializer):
@@ -57,6 +57,7 @@ class PublicProfileSerializer(serializers.ModelSerializer):
             "bio",
             "avatar_url",
             "cover_url",
+            "cover_position_y",
             "location",
             "website",
             "instagram_url",
@@ -78,11 +79,31 @@ class PublicProfileSerializer(serializers.ModelSerializer):
             "pix_enabled",
         )
 
+    def _hidden_connection_ids(self):
+        request = self.context.get("request")
+        if not request or not request.user.is_authenticated:
+            return (), ()
+        blocked = Block.objects.filter(blocker=request.user).values_list("blocked_id", flat=True)
+        blocked_by = Block.objects.filter(blocked=request.user).values_list("blocker_id", flat=True)
+        return blocked, blocked_by
+
     def get_followers_count(self, obj):
-        return obj.user.follower_links.count()
+        blocked, blocked_by = self._hidden_connection_ids()
+        return (
+            obj.user.follower_links.filter(follower__profile__is_hidden=False)
+            .exclude(follower_id__in=blocked)
+            .exclude(follower_id__in=blocked_by)
+            .count()
+        )
 
     def get_following_count(self, obj):
-        return obj.user.following_links.count()
+        blocked, blocked_by = self._hidden_connection_ids()
+        return (
+            obj.user.following_links.filter(following__profile__is_hidden=False)
+            .exclude(following_id__in=blocked)
+            .exclude(following_id__in=blocked_by)
+            .count()
+        )
 
     def get_posts_count(self, obj):
         return obj.user.posts.filter(is_published=True).count()
@@ -120,6 +141,7 @@ class ProfileUpdateSerializer(serializers.ModelSerializer):
             "bio",
             "avatar_upload",
             "cover_upload",
+            "cover_position_y",
             "location",
             "website",
             "instagram_url",
