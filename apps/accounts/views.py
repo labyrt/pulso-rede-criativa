@@ -1,5 +1,6 @@
 from django.contrib.auth import authenticate, login, logout
 from django.db.models import Q
+from django.http import Http404
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_protect
 from rest_framework import generics, permissions, status
@@ -133,7 +134,7 @@ class ConnectionsView(generics.ListAPIView):
     def get_queryset(self):
         user = generics.get_object_or_404(User.objects.select_related("profile"), username=self.kwargs["username"], is_active=True)
         if user.profile.is_hidden and user != self.request.user:
-            raise generics.get_object_or_404(User, pk=None)
+            raise Http404
 
         kind = self.kwargs["kind"]
         if kind == "followers":
@@ -141,7 +142,7 @@ class ConnectionsView(generics.ListAPIView):
         elif kind == "following":
             ids = user.following_links.values_list("following_id", flat=True)
         else:
-            raise generics.get_object_or_404(User, pk=None)
+            raise Http404
 
         blocked, blocked_by = blocked_user_ids(self.request.user)
         return (
