@@ -1,5 +1,6 @@
 from rest_framework import serializers
 
+from apps.accounts.models import Block
 from apps.accounts.serializers import UserSummarySerializer
 from apps.common.media import MediaUploadError, store_image
 
@@ -103,7 +104,13 @@ class PostSerializer(serializers.ModelSerializer):
         return self._has(Repost, obj)
 
     def get_latest_comments(self, obj):
-        comments = obj.comments.select_related("author", "author__profile").filter(parent__isnull=True)[:2]
+        comments = obj.comments.select_related("author", "author__profile").filter(parent__isnull=True)
+        request = self.context.get("request")
+        if request and request.user.is_authenticated:
+            blocked = Block.objects.filter(blocker=request.user).values_list("blocked_id", flat=True)
+            blocked_by = Block.objects.filter(blocked=request.user).values_list("blocker_id", flat=True)
+            comments = comments.exclude(author_id__in=blocked).exclude(author_id__in=blocked_by)
+        comments = comments.order_by("-created_at")[:2]
         return CommentSerializer(comments, many=True, context=self.context).data
 
     def get_tag_list(self, obj):
