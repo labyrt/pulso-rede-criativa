@@ -19,6 +19,7 @@ class FreeTierResilienceTests(SimpleTestCase):
         self.assertIn('new Set([502, 503, 504])', script)
         self.assertIn('transientStatuses.has(response.status)', script)
 
-    def test_read_timeout_allows_a_free_instance_time_to_wake(self):
+    def test_read_timeout_is_bounded_while_allowing_a_free_instance_to_wake(self):
         script = self._script()
-        self.assertIn('controller.abort(), 32000', script)
+        self.assertIn('const timeouts = [20000, 9000];', script)
+        self.assertNotIn('controller.abort(), 32000', script)
