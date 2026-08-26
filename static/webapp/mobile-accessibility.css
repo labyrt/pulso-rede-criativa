@@ -102,14 +102,15 @@ body[data-section="auth"] .social-login-button i {
     color: #0b0b0c !important;
 }
 
-/* Loading states should communicate instead of showing a spinner alone. */
+/* Loading states should be brief and describe the work being done, not imply
+   that the whole product is disconnected. Connection failures get a real retry banner. */
 .page-loader {
     min-height: 46svh;
     gap: 13px;
     color: var(--muted);
 }
 .page-loader::after {
-    content: "Conectando ao PULSO…";
+    content: "Carregando seu feed…";
     display: block;
     font-size: 12px;
     font-weight: 600;
