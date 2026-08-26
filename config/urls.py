@@ -1,3 +1,5 @@
+import os
+
 from django.conf import settings
 from django.conf.urls.static import static
 from django.contrib import admin
@@ -7,9 +9,27 @@ from django.http import JsonResponse
 from django.urls import include, path
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 
+from apps.webapp.database_guard import validate_database_target
+
 
 def healthcheck(_request):
     status = {"status": "ok", "service": "pulso", "database": "ok"}
+
+    require_neon = os.getenv("PULSO_REQUIRE_NEON_DATABASE", "0").strip() == "1"
+    expected_database = os.getenv("PULSO_EXPECTED_DATABASE_NAME", "").strip()
+    if require_neon or expected_database:
+        try:
+            validate_database_target(
+                os.getenv("DATABASE_URL", ""),
+                require_neon=require_neon,
+                expected_database=expected_database,
+            )
+        except ValueError:
+            return JsonResponse(
+                {"status": "degraded", "service": "pulso", "database": "unexpected_target"},
+                status=503,
+            )
+
     try:
         with connection.cursor() as cursor:
             cursor.execute("SELECT 1")
@@ -35,7 +55,7 @@ def healthcheck(_request):
 urlpatterns = [
     path("admin/", admin.site.urls),
     path("accounts/", include("allauth.urls")),
-    path("health/", healthcheck, name="healthcheck"),
+    path("/health/", healthcheck, name="healthcheck"),
     path("api/schema/", SpectacularAPIView.as_view(), name="api-schema"),
     path("api/docs/", SpectacularSwaggerView.as_view(url_name="api-schema"), name="api-docs"),
     path("api/v1/auth/", include("apps.accounts.urls")),
