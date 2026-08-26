@@ -1,4 +1,4 @@
-from django.db.models import Count, Q
+from django.db.models import Count, Exists, OuterRef, Prefetch, Q
 from rest_framework import permissions, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -21,13 +21,30 @@ def hidden_user_ids(user):
 
 def visible_posts_for(user):
     blocked, blocked_by = hidden_user_ids(user)
+    visible_comments = (
+        Comment.objects.filter(parent__isnull=True, author__profile__is_hidden=False)
+        .exclude(author_id__in=blocked)
+        .exclude(author_id__in=blocked_by)
+        .select_related("author", "author__profile")
+        .order_by("-created_at")
+    )
     return (
         Post.objects.filter(is_published=True)
         .filter(Q(author__profile__is_hidden=False) | Q(author=user))
         .exclude(author_id__in=blocked)
         .exclude(author_id__in=blocked_by)
+        .annotate(
+            pulso_is_liked=Exists(Like.objects.filter(post_id=OuterRef("pk"), user=user)),
+            pulso_is_bookmarked=Exists(Bookmark.objects.filter(post_id=OuterRef("pk"), user=user)),
+            pulso_is_reposted=Exists(Repost.objects.filter(post_id=OuterRef("pk"), user=user)),
+        )
         .select_related("author", "author__profile")
-        .prefetch_related("likes", "reposts", "comments")
+        .prefetch_related(
+            "likes",
+            "reposts",
+            "comments",
+            Prefetch("comments", queryset=visible_comments, to_attr="pulso_visible_comments"),
+        )
     )
 
 

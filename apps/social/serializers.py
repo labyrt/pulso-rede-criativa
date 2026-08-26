@@ -92,7 +92,18 @@ class PostSerializer(serializers.ModelSerializer):
 
     def _has(self, model, obj):
         request = self.context.get("request")
-        return bool(request and request.user.is_authenticated and model.objects.filter(post=obj, user=request.user).exists())
+        if not request or not request.user.is_authenticated:
+            return False
+
+        annotation = {
+            Like: "pulso_is_liked",
+            Bookmark: "pulso_is_bookmarked",
+            Repost: "pulso_is_reposted",
+        }.get(model)
+        if annotation and hasattr(obj, annotation):
+            return bool(getattr(obj, annotation))
+
+        return model.objects.filter(post=obj, user=request.user).exists()
 
     def get_is_liked(self, obj):
         return self._has(Like, obj)
@@ -104,16 +115,20 @@ class PostSerializer(serializers.ModelSerializer):
         return self._has(Repost, obj)
 
     def get_latest_comments(self, obj):
-        comments = obj.comments.select_related("author", "author__profile").filter(
-            parent__isnull=True,
-            author__profile__is_hidden=False,
-        )
-        request = self.context.get("request")
-        if request and request.user.is_authenticated:
-            blocked = Block.objects.filter(blocker=request.user).values_list("blocked_id", flat=True)
-            blocked_by = Block.objects.filter(blocked=request.user).values_list("blocker_id", flat=True)
-            comments = comments.exclude(author_id__in=blocked).exclude(author_id__in=blocked_by)
-        comments = comments.order_by("-created_at")[:2]
+        prefetched = getattr(obj, "pulso_visible_comments", None)
+        if prefetched is not None:
+            comments = prefetched[:2]
+        else:
+            comments = obj.comments.select_related("author", "author__profile").filter(
+                parent__isnull=True,
+                author__profile__is_hidden=False,
+            )
+            request = self.context.get("request")
+            if request and request.user.is_authenticated:
+                blocked = Block.objects.filter(blocker=request.user).values_list("blocked_id", flat=True)
+                blocked_by = Block.objects.filter(blocked=request.user).values_list("blocker_id", flat=True)
+                comments = comments.exclude(author_id__in=blocked).exclude(author_id__in=blocked_by)
+            comments = comments.order_by("-created_at")[:2]
         return CommentSerializer(comments, many=True, context=self.context).data
 
     def get_tag_list(self, obj):

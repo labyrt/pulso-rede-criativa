@@ -214,4 +214,14 @@ class UserSummarySerializer(serializers.ModelSerializer):
 
     def get_is_following(self, obj):
         request = self.context.get("request")
-        return bool(request and request.user.is_authenticated and Follow.objects.filter(follower=request.user, following=obj).exists())
+        if not request or not request.user.is_authenticated:
+            return False
+
+        cache_name = "_pulso_following_ids"
+        following_ids = getattr(request, cache_name, None)
+        if following_ids is None:
+            following_ids = set(
+                Follow.objects.filter(follower=request.user).values_list("following_id", flat=True)
+            )
+            setattr(request, cache_name, following_ids)
+        return obj.pk in following_ids
