@@ -3,6 +3,7 @@
 
   const nativeFetch = window.fetch.bind(window);
   const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+  const transientStatuses = new Set([502, 503, 504]);
 
   function requestUrl(input) {
     try {
@@ -20,22 +21,38 @@
     // Leave third-party requests and callers with their own cancellation policy untouched.
     if (!isSameOriginApi || init.signal) return nativeFetch(input, init);
 
+    // Mutating requests are intentionally never retried or force-aborted here. A POST,
+    // PATCH or DELETE may already have reached the server even if the browser loses
+    // the response; repeating it could duplicate a post, comment, Pix intent or action.
     const retryable = method === "GET" || method === "HEAD";
-    const maxAttempts = retryable ? 2 : 1;
+    if (!retryable) return nativeFetch(input, init);
+
+    const maxAttempts = 2;
 
     for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
       const controller = new AbortController();
-      const timeout = window.setTimeout(() => controller.abort(), 18000);
+      // Render Free can take longer than a normal request while waking. Two bounded
+      // attempts allow the instance to wake without leaving the interface spinning forever.
+      const timeout = window.setTimeout(() => controller.abort(), 32000);
 
       try {
-        return await nativeFetch(input, { ...init, signal: controller.signal });
+        const response = await nativeFetch(input, { ...init, signal: controller.signal });
+        const canRetryStatus = attempt < maxAttempts && transientStatuses.has(response.status);
+
+        if (canRetryStatus) {
+          try { await response.body?.cancel(); } catch (_) {}
+          await sleep(700);
+          continue;
+        }
+
+        return response;
       } catch (error) {
         const timedOut = error?.name === "AbortError";
         const networkFailure = error instanceof TypeError;
         const canRetry = attempt < maxAttempts && (timedOut || networkFailure);
 
         if (canRetry) {
-          await sleep(900);
+          await sleep(700);
           continue;
         }
 
