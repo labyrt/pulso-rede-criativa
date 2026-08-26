@@ -1,0 +1,279 @@
+/* PULSO — mobile, contrast and accessibility refinements.
+   Loaded after the core styles so these rules can stay small and reversible. */
+
+/* Dark mode needs a lighter secondary-text token on dark surfaces. */
+html[data-theme="dark"] {
+    --muted: #b8b7b1;
+    --line: #3b3c40;
+}
+
+/* Keep light cards readable when the surrounding landing page is dark. */
+html[data-theme="dark"] body[data-section="landing"] .float-card {
+    color: #0b0b0c;
+}
+html[data-theme="dark"] body[data-section="landing"] .float-card p,
+html[data-theme="dark"] body[data-section="landing"] .creator-row strong,
+html[data-theme="dark"] body[data-section="landing"] .social-counts {
+    color: #0b0b0c;
+}
+html[data-theme="dark"] body[data-section="landing"] .creator-row small {
+    color: #5f5d58;
+}
+
+/* The coloured feature cards have explicit foregrounds instead of inheriting
+   the global dark-theme text colour. */
+body[data-section="landing"] .feature--lime,
+body[data-section="landing"] .feature--pink {
+    color: #0b0b0c;
+}
+body[data-section="landing"] .feature--blue {
+    color: #ffffff;
+}
+body[data-section="landing"] .feature--lime p,
+body[data-section="landing"] .feature--pink p {
+    color: #262626;
+}
+body[data-section="landing"] .feature--blue p {
+    color: #ffffff;
+}
+
+/* CTA decoration must never sit above the copy. */
+body[data-section="landing"] .cta > div,
+body[data-section="landing"] .cta > a {
+    position: relative;
+    z-index: 2;
+}
+body[data-section="landing"] .cta::before {
+    z-index: 0;
+    pointer-events: none;
+}
+body[data-section="landing"] .cta > div > span {
+    color: #ffffff;
+}
+
+/* Authentication intentionally uses a light reading surface on every theme.
+   This prevents white-on-white labels and preserves predictable form contrast. */
+body[data-section="auth"] {
+    --muted: #5f5d58;
+    --line: #d8d6cf;
+    color: #0b0b0c !important;
+    background: #ffffff !important;
+}
+body[data-section="auth"] .auth-panel,
+body[data-section="auth"] .auth-box {
+    color: #0b0b0c !important;
+    background: #ffffff !important;
+}
+body[data-section="auth"] .auth-box h2,
+body[data-section="auth"] .stack-form label,
+body[data-section="auth"] .auth-switch,
+body[data-section="auth"] .auth-divider,
+body[data-section="auth"] .social-login-note {
+    color: #0b0b0c;
+}
+body[data-section="auth"] .stack-form label small,
+body[data-section="auth"] .auth-switch,
+body[data-section="auth"] .auth-divider,
+body[data-section="auth"] .social-login-note {
+    color: #5f5d58;
+}
+body[data-section="auth"] .auth-switch a {
+    color: #0b0b0c !important;
+}
+html[data-theme="dark"] body[data-section="auth"] input,
+body[data-section="auth"] input {
+    background: #f7f6f2 !important;
+    color: #0b0b0c !important;
+    border-color: #d8d6cf !important;
+}
+body[data-section="auth"] input::placeholder {
+    color: #77756f !important;
+    opacity: 1;
+}
+html[data-theme="dark"] body[data-section="auth"] .social-login-button,
+body[data-section="auth"] .social-login-button {
+    background: #ffffff !important;
+    color: #0b0b0c !important;
+    border-color: #d8d6cf !important;
+}
+html[data-theme="dark"] body[data-section="auth"] .social-login-button i,
+body[data-section="auth"] .social-login-button i {
+    background: #efeee9 !important;
+    color: #0b0b0c !important;
+}
+
+/* Loading states should communicate instead of showing a spinner alone. */
+.page-loader {
+    min-height: 46svh;
+    gap: 13px;
+    color: var(--muted);
+}
+.page-loader::after {
+    content: "Conectando ao PULSO…";
+    display: block;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: .01em;
+}
+
+/* Stronger secondary text on the app shell in dark mode. */
+html[data-theme="dark"] .page-header p,
+html[data-theme="dark"] .composer-inline p,
+html[data-theme="dark"] .post-head small,
+html[data-theme="dark"] .post-head time,
+html[data-theme="dark"] .profile-handle,
+html[data-theme="dark"] .profile-meta,
+html[data-theme="dark"] .creator-card p,
+html[data-theme="dark"] .notification-item time {
+    color: #b8b7b1;
+}
+
+@media (max-width: 640px) {
+    body[data-section="landing"] .wrap {
+        width: min(calc(100% - 32px), 1440px);
+    }
+
+    body[data-section="landing"] .hero {
+        padding-block: 38px 58px;
+    }
+    body[data-section="landing"] .hero h1 {
+        font-size: clamp(49px, 14vw, 58px);
+        line-height: .88;
+    }
+    body[data-section="landing"] .hero-copy > p {
+        max-width: 33ch;
+        line-height: 1.48;
+    }
+    body[data-section="landing"] .hero-stage {
+        min-height: 410px;
+        overflow: hidden;
+        border-radius: 28px;
+    }
+    body[data-section="landing"] .float-card--main {
+        width: 91%;
+        left: 50%;
+        transform: translateX(-50%) rotate(-1deg);
+    }
+    body[data-section="landing"] .creator-row {
+        align-items: flex-start;
+    }
+    body[data-section="landing"] .creator-row > div {
+        flex: 1;
+    }
+    body[data-section="landing"] .badge-live {
+        margin-left: 4px;
+        white-space: nowrap;
+    }
+
+    body[data-section="landing"] .manifesto {
+        padding-block: 84px;
+        gap: 22px;
+    }
+    body[data-section="landing"] .manifesto h2 {
+        font-size: clamp(40px, 12vw, 50px);
+        line-height: 1;
+        margin-bottom: 28px;
+    }
+    body[data-section="landing"] .manifesto p {
+        margin-left: 0;
+        line-height: 1.5;
+    }
+
+    body[data-section="landing"] .features {
+        gap: 14px;
+        padding-bottom: 86px;
+    }
+    body[data-section="landing"] .feature {
+        min-height: 330px;
+        padding: 28px;
+        border-radius: 30px;
+    }
+    body[data-section="landing"] .feature h3 {
+        font-size: clamp(31px, 9.5vw, 39px);
+        line-height: 1.02;
+        overflow-wrap: normal;
+    }
+    body[data-section="landing"] .feature p {
+        font-size: 16px;
+        line-height: 1.48;
+    }
+
+    body[data-section="landing"] .cta {
+        min-height: 410px;
+        padding: 34px 28px;
+        margin-bottom: 58px;
+        align-items: flex-end;
+        gap: 22px;
+    }
+    body[data-section="landing"] .cta::before {
+        width: 330px;
+        height: 330px;
+        right: -145px;
+        top: -155px;
+        opacity: .9;
+    }
+    body[data-section="landing"] .cta h2 {
+        max-width: 8.8ch;
+        font-size: clamp(42px, 12vw, 54px);
+        line-height: .98;
+    }
+    body[data-section="landing"] .round-cta {
+        flex: 0 0 auto;
+        width: 78px;
+        height: 78px;
+        font-size: 31px;
+    }
+
+    body[data-section="landing"] .landing-footer {
+        gap: 22px;
+        padding-bottom: 42px;
+    }
+
+    body[data-section="auth"] .auth-panel {
+        padding: 28px 22px 34px;
+        align-items: flex-start;
+    }
+    body[data-section="auth"] .auth-box {
+        margin-block: 0;
+        padding-top: 18px;
+    }
+    body[data-section="auth"] .auth-box h2 {
+        font-size: clamp(36px, 10.5vw, 44px);
+        line-height: 1.04;
+        margin-bottom: 30px;
+    }
+    body[data-section="auth"] .stack-form {
+        gap: 17px;
+    }
+    body[data-section="auth"] .stack-form label {
+        gap: 7px;
+        line-height: 1.25;
+    }
+    body[data-section="auth"] .stack-form input {
+        min-height: 56px;
+        font-size: 16px;
+    }
+
+    .page-header {
+        padding: 22px 18px 18px;
+    }
+    .page-header h1 {
+        font-size: 27px;
+    }
+    .page-header p {
+        font-size: 14px;
+        line-height: 1.45;
+    }
+    .composer-inline {
+        margin: 18px 12px;
+        padding: 15px;
+        border-radius: 22px;
+    }
+    .composer-inline p {
+        font-size: 15px;
+        line-height: 1.35;
+    }
+    .page-loader {
+        min-height: 42svh;
+    }
+}
