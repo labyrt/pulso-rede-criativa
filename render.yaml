@@ -11,20 +11,30 @@ services:
     envVars:
       - key: PYTHON_VERSION
         value: 3.12.8
+
+      # These secrets must survive service recreation. On an existing Blueprint,
+      # Render preserves the values already stored in the Dashboard when sync is false.
       - key: DJANGO_SECRET_KEY
-        generateValue: true
+        sync: false
+      - key: FIELD_ENCRYPTION_KEY
+        sync: false
+
       - key: DJANGO_DEBUG
         value: "False"
       - key: DJANGO_ALLOWED_HOSTS
         value: .onrender.com
       - key: CSRF_TRUSTED_ORIGINS
         value: https://*.onrender.com
-      - key: FIELD_ENCRYPTION_KEY
-        generateValue: true
+
+      # Neon is the production source of truth. Keep the connection string only in
+      # Render's secret environment; never reference or recreate Render Postgres here.
       - key: DATABASE_URL
-        fromDatabase:
-          name: pulso-db
-          property: connectionString
+        sync: false
+      - key: PULSO_REQUIRE_NEON_DATABASE
+        value: "1"
+      - key: PULSO_EXPECTED_DATABASE_NAME
+        value: pulso
+
       - key: REDIS_URL
         fromService:
           type: keyvalue
@@ -36,12 +46,4 @@ services:
     plan: free
     region: virginia
     maxmemoryPolicy: allkeys-lru
-    ipAllowList: []
-
-databases:
-  - name: pulso-db
-    plan: free
-    region: virginia
-    databaseName: pulso
-    user: pulso
     ipAllowList: []
