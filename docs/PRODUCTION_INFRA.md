@@ -60,7 +60,7 @@ The completed Render-to-Neon data-copy command is no longer part of the normal b
 
 The legacy Render Postgres instance can be retained temporarily during the rollback window, but the application must not reference it. Removing the database declaration from `render.yaml` prevents a future Blueprint sync from recreating or reconnecting production to that database.
 
-After the rollback window has closed and data integrity in Neon has been independently confirmed, the legacy Render database can be removed manually from the Render Dashboard.
+After the rollback window has closed and data integrity in Neon has been independently confirmed, the legacy Render database can be removed manually from the Render Dashboard. It must never be deleted automatically as part of an application deploy.
 
 ## Deployment rule
 
