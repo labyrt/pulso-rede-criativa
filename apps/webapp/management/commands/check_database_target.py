@@ -1,8 +1,9 @@
 import os
-from urllib.parse import urlparse
 
 from django.core.management.base import BaseCommand, CommandError
 from django.db import connection
+
+from apps.webapp.database_guard import validate_database_target
 
 
 class Command(BaseCommand):
@@ -16,23 +17,14 @@ class Command(BaseCommand):
             self.stdout.write("PULSO_DATABASE_TARGET guard=disabled")
             return
 
-        database_url = os.getenv("DATABASE_URL", "").strip()
-        if not database_url:
-            raise CommandError("Production database guard failed: DATABASE_URL is not configured.")
-
-        parsed = urlparse(database_url)
-        host = (parsed.hostname or "").lower().rstrip(".")
-        configured_database = parsed.path.lstrip("/")
-
-        if require_neon and not host.endswith(".neon.tech"):
-            raise CommandError(
-                "Production database guard rejected DATABASE_URL: expected a Neon database endpoint."
+        try:
+            target = validate_database_target(
+                os.getenv("DATABASE_URL", ""),
+                require_neon=require_neon,
+                expected_database=expected_database,
             )
-
-        if expected_database and configured_database != expected_database:
-            raise CommandError(
-                "Production database guard rejected DATABASE_URL: unexpected database name."
-            )
+        except ValueError as exc:
+            raise CommandError(f"Production database guard failed: {exc}.") from exc
 
         try:
             with connection.cursor() as cursor:
@@ -48,9 +40,9 @@ class Command(BaseCommand):
                 "Production database guard connected to an unexpected database."
             )
 
-        provider = "neon" if host.endswith(".neon.tech") else "other"
         self.stdout.write(
             self.style.SUCCESS(
-                f"PULSO_DATABASE_TARGET provider={provider} database={actual_database} verified=1"
+                "PULSO_DATABASE_TARGET "
+                f"provider={target['provider']} database={actual_database} verified=1"
             )
         )
