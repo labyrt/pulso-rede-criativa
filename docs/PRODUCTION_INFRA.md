@@ -54,7 +54,7 @@ The production build order is:
 5. Print a non-secret integration readiness summary.
 6. Optionally bootstrap a superuser only when `PULSO_BOOTSTRAP_SUPERUSER=1` is explicitly enabled.
 
-The completed Render-to-Neon data-copy command is no longer part of the normal build path. It remains in the repository only as migration/recovery history.
+The completed Render-to-Neon data-copy command is no longer part of the normal build path. It remains in the repository only as migration/recovery history. One-time migration flags such as `PULSO_COPY_DATABASE_TO_NEON` must stay disabled during normal production deploys.
 
 ## Rollback database
 
