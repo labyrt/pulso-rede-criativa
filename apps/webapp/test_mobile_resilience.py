@@ -1,6 +1,3 @@
-from pathlib import Path
-
-from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 
@@ -32,10 +29,9 @@ class MobileResilienceTests(TestCase):
         self.assertEqual(response.headers.get("Pragma"), "no-cache")
         self.assertIn("Cookie", response.headers.get("Vary", ""))
 
-    def test_free_tier_resilience_keeps_mutations_single_shot_and_bounds_reads(self):
-        script = Path(settings.BASE_DIR, "static", "webapp", "resilience.js").read_text(encoding="utf-8")
+    def test_app_uses_native_fetch_path_without_global_wrapper(self):
+        response = self.client.get("/app/")
+        html = response.content.decode("utf-8")
 
-        self.assertIn('if (!retryable) return nativeFetch(input, init);', script)
-        self.assertIn("const timeouts = [20000, 9000];", script)
-        self.assertNotIn("32000", script)
-        self.assertIn("Tentar de novo", script)
+        self.assertIn("webapp/app.js", html)
+        self.assertNotIn("webapp/resilience.js", html)
