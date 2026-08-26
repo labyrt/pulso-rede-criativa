@@ -1,8 +1,13 @@
 import os
+from io import StringIO
 from unittest.mock import patch
 
+from django.core.management import call_command
+from django.core.management.base import CommandError
 from django.db import DatabaseError
 from django.test import TestCase, override_settings
+
+from apps.webapp.database_guard import validate_database_target
 
 
 @override_settings(
@@ -60,6 +65,23 @@ class ProductionHardeningTests(TestCase):
         self.assertEqual(response.status_code, 503)
         self.assertEqual(response.json(), {"status": "degraded", "service": "pulso", "database": "unavailable"})
 
+    def test_health_endpoint_rejects_database_target_drift_before_connecting(self):
+        env = {
+            "PULSO_REQUIRE_NEON_DATABASE": "1",
+            "PULSO_EXPECTED_DATABASE_NAME": "pulso",
+            "DATABASE_URL": "postgresql://user:secret@legacy.example.com/pulso",
+        }
+        with patch.dict(os.environ, env, clear=False):
+            with patch("config.urls.connection.cursor") as cursor:
+                response = self.client.get("/health/")
+
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(
+            response.json(),
+            {"status": "degraded", "service": "pulso", "database": "unexpected_target"},
+        )
+        cursor.assert_not_called()
+
     @override_settings(REDIS_URL="rediss://redis.example.invalid:6379")
     def test_health_endpoint_fails_closed_when_redis_is_unavailable(self):
         with patch("config.urls.cache.get", side_effect=ConnectionError("redis unavailable")):
@@ -78,3 +100,32 @@ class ProductionHardeningTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["redis"], "ok")
+
+    def test_database_guard_accepts_expected_neon_target(self):
+        target = validate_database_target(
+            "postgresql://user:secret@ep-example.us-east-2.aws.neon.tech/pulso?sslmode=require",
+            require_neon=True,
+            expected_database="pulso",
+        )
+        self.assertEqual(target, {"provider": "neon", "database": "pulso"})
+
+    def test_database_guard_rejects_legacy_provider(self):
+        with self.assertRaises(ValueError):
+            validate_database_target(
+                "postgresql://user:secret@legacy.example.com/pulso",
+                require_neon=True,
+                expected_database="pulso",
+            )
+
+    def test_management_command_rejects_legacy_database_before_connecting(self):
+        env = {
+            "PULSO_REQUIRE_NEON_DATABASE": "1",
+            "PULSO_EXPECTED_DATABASE_NAME": "pulso",
+            "DATABASE_URL": "postgresql://user:secret@legacy.example.com/pulso",
+        }
+        with patch.dict(os.environ, env, clear=False):
+            with patch("apps.webapp.management.commands.check_database_target.connection.cursor") as cursor:
+                with self.assertRaises(CommandError):
+                    call_command("check_database_target", stdout=StringIO())
+
+        cursor.assert_not_called()
