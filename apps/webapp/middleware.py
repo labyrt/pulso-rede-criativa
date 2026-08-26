@@ -30,16 +30,23 @@ class SecurityHeadersMiddleware:
 
         response = self.get_response(request)
         if request.path.startswith("/api/"):
-            self._protect_private_api_response(response)
+            self._protect_private_response(response, authorization=True)
+        elif request.user.is_authenticated and response.get("Content-Type", "").startswith("text/html"):
+            # Authenticated HTML must not be restored from a stale mobile browser cache.
+            # On a sleeping free instance, forcing a real document request wakes Django
+            # before the JavaScript asks for profile/feed data and avoids a false "loaded"
+            # shell that then sits on an API spinner.
+            self._protect_private_response(response, authorization=False)
         return self._secure(response)
 
     @staticmethod
-    def _protect_private_api_response(response):
-        # Authenticated API payloads can contain profile, social and payment metadata.
-        # Never let browsers or intermediary caches persist them across sessions.
+    def _protect_private_response(response, authorization=False):
         response["Cache-Control"] = "no-store, private"
         response["Pragma"] = "no-cache"
-        patch_vary_headers(response, ("Cookie", "Authorization"))
+        vary = ["Cookie"]
+        if authorization:
+            vary.append("Authorization")
+        patch_vary_headers(response, tuple(vary))
 
     def _secure(self, response):
         response.setdefault(
