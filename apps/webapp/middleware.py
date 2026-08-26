@@ -1,6 +1,7 @@
 import os
 
 from django.http import HttpResponse
+from django.utils.cache import patch_vary_headers
 
 
 class SecurityHeadersMiddleware:
@@ -28,7 +29,17 @@ class SecurityHeadersMiddleware:
             return self._secure(response)
 
         response = self.get_response(request)
+        if request.path.startswith("/api/"):
+            self._protect_private_api_response(response)
         return self._secure(response)
+
+    @staticmethod
+    def _protect_private_api_response(response):
+        # Authenticated API payloads can contain profile, social and payment metadata.
+        # Never let browsers or intermediary caches persist them across sessions.
+        response["Cache-Control"] = "no-store, private"
+        response["Pragma"] = "no-cache"
+        patch_vary_headers(response, ("Cookie", "Authorization"))
 
     def _secure(self, response):
         response.setdefault(
