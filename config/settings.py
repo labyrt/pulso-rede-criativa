@@ -6,6 +6,7 @@ The development defaults are intentionally safe enough for local use only.
 
 from pathlib import Path
 import os
+from urllib.parse import urlparse
 
 import dj_database_url
 
@@ -89,13 +90,30 @@ TEMPLATES = [
     },
 ]
 
+DATABASE_URL = os.getenv("DATABASE_URL", "").strip()
+_database_host = (urlparse(DATABASE_URL).hostname or "").lower() if DATABASE_URL else ""
+IS_NEON_DATABASE = _database_host.endswith(".neon.tech")
+DATABASE_CONN_MAX_AGE = int(os.getenv("DB_CONN_MAX_AGE", "30" if IS_NEON_DATABASE else "600"))
+DATABASE_CONNECT_TIMEOUT = int(os.getenv("DB_CONNECT_TIMEOUT", "10"))
+
 DATABASES = {
     "default": dj_database_url.config(
         default=f"sqlite:///{BASE_DIR / 'db.sqlite3'}",
-        conn_max_age=600,
+        conn_max_age=DATABASE_CONN_MAX_AGE,
         conn_health_checks=True,
     )
 }
+
+# Neon can scale its compute to zero and sever long-lived TCP sessions. Keep
+# Django's persistent connection window short and fail connection attempts in a
+# bounded time so a sleeping/restarting database cannot leave an HTTP request
+# hanging indefinitely. The values stay environment-overridable for production.
+if DATABASES["default"]["ENGINE"] == "django.db.backends.postgresql":
+    database_options = DATABASES["default"].setdefault("OPTIONS", {})
+    database_options.setdefault("connect_timeout", DATABASE_CONNECT_TIMEOUT)
+    if IS_NEON_DATABASE:
+        database_options.setdefault("sslmode", "require")
+        DATABASES["default"]["CONN_HEALTH_CHECKS"] = True
 
 AUTH_USER_MODEL = "accounts.User"
 SITE_ID = 1
