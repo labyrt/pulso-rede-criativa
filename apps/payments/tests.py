@@ -16,8 +16,8 @@ class PixTests(TestCase):
         self.creator = User.objects.create_user(username="dara", email="dara@test.dev", password="VeryStrong!123")
         self.supporter = User.objects.create_user(username="bia", email="bia@test.dev", password="VeryStrong!123")
         profile = self.creator.profile
-        profile.set_pix_key("dara@test.dev")
-        profile.pix_key_type = "email"
+        profile.set_pix_key("123e4567-e89b-12d3-a456-426655440000")
+        profile.pix_key_type = "random"
         profile.pix_receiver_name = "DARA LUZ"
         profile.pix_city = "RECIFE"
         profile.save()
@@ -34,6 +34,17 @@ class PixTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn("<svg", response.data["qr_svg"])
         self.assertNotIn("pix_key_ciphertext", response.data)
+
+    def test_pix_endpoint_rejects_legacy_non_random_key(self):
+        profile = self.creator.profile
+        profile.set_pix_key("dara@test.dev")
+        profile.pix_key_type = "email"
+        profile.save(update_fields=["pix_key_ciphertext", "pix_key_type", "updated_at"])
+
+        response = self.client.get(f"/api/v1/support/{self.creator.username}/pix/?amount=25")
+
+        self.assertEqual(response.status_code, 404)
+        self.assertIn("chave aleatória", response.data["detail"])
 
     def test_support_intent_can_reference_a_creator_post(self):
         post = Post.objects.create(author=self.creator, body="Processo apoiável", accepts_support=True)

@@ -156,7 +156,13 @@ class PostSerializer(serializers.ModelSerializer):
 
     def get_pix_enabled(self, obj):
         profile = obj.author.profile
-        return bool(obj.accepts_support and profile.pix_key_ciphertext and profile.pix_receiver_name and profile.pix_city)
+        return bool(
+            obj.accepts_support
+            and profile.pix_key_type == "random"
+            and profile.pix_key_ciphertext
+            and profile.pix_receiver_name
+            and profile.pix_city
+        )
 
 
 class NotificationSerializer(serializers.ModelSerializer):
