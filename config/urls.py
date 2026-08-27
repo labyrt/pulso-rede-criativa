@@ -1,3 +1,4 @@
+import logging
 import os
 
 from django.conf import settings
@@ -5,11 +6,39 @@ from django.conf.urls.static import static
 from django.contrib import admin
 from django.core.cache import cache
 from django.db import DatabaseError, connection
-from django.http import JsonResponse
+from django.http import HttpResponse, JsonResponse
 from django.urls import include, path
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 
 from apps.webapp.database_guard import validate_database_target
+
+
+logger = logging.getLogger("pulso.client")
+CLIENT_DIAGNOSTIC_EVENTS = {
+    "watchdog_loaded",
+    "window_error",
+    "unhandled_rejection",
+    "recovery_armed",
+    "recovery_started",
+    "feed_response_ok",
+    "me_response_ok",
+    "render_success",
+    "render_error",
+    "retry_rendered",
+    "pageshow_persisted",
+}
+
+
+def client_diagnostic(request):
+    """Record coarse client lifecycle events without user content or database access."""
+    event = request.GET.get("event", "").strip()[:64]
+    if event not in CLIENT_DIAGNOSTIC_EVENTS:
+        event = "unknown"
+    detail = request.GET.get("detail", "").strip().replace("\n", " ")[:160]
+    logger.info("PULSO_CLIENT event=%s detail=%s", event, detail or "-")
+    response = HttpResponse(status=204)
+    response["Cache-Control"] = "no-store"
+    return response
 
 
 def _database_unavailable_response():
@@ -74,6 +103,7 @@ urlpatterns = [
     path("admin/", admin.site.urls),
     path("accounts/", include("allauth.urls")),
     path("health/", healthcheck, name="healthcheck"),
+    path("api/v1/client-diagnostic/", client_diagnostic, name="client-diagnostic"),
     path("api/schema/", SpectacularAPIView.as_view(), name="api-schema"),
     path("api/docs/", SpectacularSwaggerView.as_view(url_name="api-schema"), name="api-docs"),
     path("api/v1/auth/", include("apps.accounts.urls")),

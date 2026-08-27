@@ -20,8 +20,8 @@
 <body data-section="{% block section %}{% endblock %}" data-profile="{% block profile %}{% endblock %}">
     {% block content %}{% endblock %}
     <div class="toast-stack" id="toast-stack" aria-live="polite"></div>
-    <script src="{% static 'webapp/app.js' %}" defer></script>
     <script src="{% static 'webapp/lifecycle-recovery.js' %}" defer></script>
+    <script src="{% static 'webapp/app.js' %}" defer></script>
     <script src="{% static 'webapp/hardening.js' %}" defer></script>
     <script src="{% static 'webapp/social-interactions.js' %}" defer></script>
     <script src="{% static 'webapp/profile-chat-enhancements.js' %}" defer></script>

@@ -32,14 +32,14 @@ class MobileResilienceTests(TestCase):
         self.assertEqual(response.headers.get("Pragma"), "no-cache")
         self.assertIn("Cookie", response.headers.get("Vary", ""))
 
-    def test_app_uses_native_fetch_and_loads_lifecycle_recovery(self):
+    def test_lifecycle_observer_loads_before_main_app_bundle(self):
         response = self.client.get("/app/")
         html = response.content.decode("utf-8")
 
         self.assertIn("webapp/app.js", html)
         self.assertIn("webapp/lifecycle-recovery.js", html)
         self.assertNotIn("webapp/resilience.js", html)
-        self.assertLess(html.index("webapp/app.js"), html.index("webapp/lifecycle-recovery.js"))
+        self.assertLess(html.index("webapp/lifecycle-recovery.js"), html.index("webapp/app.js"))
 
     def test_feed_watchdog_recovers_stalled_dom_without_reloading_document(self):
         script = Path(settings.BASE_DIR, "static", "webapp", "lifecycle-recovery.js").read_text(encoding="utf-8")
@@ -49,6 +49,10 @@ class MobileResilienceTests(TestCase):
         self.assertIn("new AbortController()", script)
         self.assertIn('/api/v1/social/feed/?_pulso=', script)
         self.assertIn('/api/v1/auth/me/?_pulso=', script)
+        self.assertIn('/api/v1/client-diagnostic/?', script)
+        self.assertIn('diagnostic("watchdog_loaded"', script)
+        self.assertIn('diagnostic("window_error"', script)
+        self.assertIn('diagnostic("render_success"', script)
         self.assertIn('cache: "no-store"', script)
         self.assertIn("renderFeed(feed, me", script)
         self.assertIn("pageContent.innerHTML", script)
@@ -66,3 +70,10 @@ class MobileResilienceTests(TestCase):
         self.assertNotIn('method: "POST"', script)
         self.assertNotIn('method: "PATCH"', script)
         self.assertNotIn('method: "DELETE"', script)
+
+    def test_client_diagnostic_endpoint_is_database_independent_and_no_store(self):
+        self.client.logout()
+        response = self.client.get("/api/v1/client-diagnostic/?event=watchdog_loaded&detail=test")
+
+        self.assertEqual(response.status_code, 204)
+        self.assertIn("no-store", response.headers.get("Cache-Control", ""))
