@@ -25,22 +25,16 @@
   });
   window.addEventListener("unhandledrejection", event => {
     const reason = event.reason;
-    const label = reason?.name || reason?.constructor?.name || typeof reason;
-    diagnostic("unhandled_rejection", label);
+    diagnostic("unhandled_rejection", reason?.name || reason?.constructor?.name || typeof reason);
   });
 
   const stallDelayMs = 3500;
   const requestTimeoutMs = 10000;
-  let stallTimer = null;
+  let recoveryTimer = null;
   let recovering = false;
-  let armedReported = false;
 
   const escapeHtml = (value = "") => String(value).replace(/[&<>'"]/g, character => ({
-    "&": "&amp;",
-    "<": "&lt;",
-    ">": "&gt;",
-    "'": "&#39;",
-    '"': "&quot;",
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;",
   }[character]));
 
   const safeUrl = value => {
@@ -56,12 +50,7 @@
   };
 
   const initials = (name = "P") => String(name || "P")
-    .trim()
-    .split(/\s+/)
-    .slice(0, 2)
-    .map(part => part[0] || "")
-    .join("")
-    .toUpperCase() || "P";
+    .trim().split(/\s+/).slice(0, 2).map(part => part[0] || "").join("").toUpperCase() || "P";
 
   function loader() {
     return pageContent.querySelector(".page-loader");
@@ -71,17 +60,6 @@
     const label = user.display_name || user.username || "P";
     const image = safeUrl(user.avatar_url);
     return `<span class="avatar">${image ? `<img src="${escapeHtml(image)}" alt="">` : escapeHtml(initials(label))}</span>`;
-  }
-
-  function formatDate(value) {
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return "";
-    return new Intl.DateTimeFormat("pt-BR", {
-      day: "2-digit",
-      month: "short",
-      hour: "2-digit",
-      minute: "2-digit",
-    }).format(date);
   }
 
   function timeAgo(value) {
@@ -119,7 +97,6 @@
     const portfolioUrl = safeUrl(post.portfolio_url);
     const tags = Array.isArray(post.tag_list) ? post.tag_list : [];
     const comments = commentsMarkup(post);
-    const createdAt = formatDate(post.created_at);
 
     return `<article class="post-card" data-post="${escapeHtml(post.id ?? "")}">
       <a href="${profileHref}">${avatar(author)}</a>
@@ -127,7 +104,7 @@
         <header class="post-head">
           <a href="${profileHref}"><strong>${escapeHtml(author.display_name || username || "Criador")}</strong></a>
           ${username ? `<small>@${escapeHtml(username)}</small>` : ""}
-          <time title="${escapeHtml(createdAt)}">${escapeHtml(timeAgo(post.created_at))}</time>
+          <time>${escapeHtml(timeAgo(post.created_at))}</time>
         </header>
         <div class="post-body">${escapeHtml(post.body || "")}</div>
         ${imageUrl ? `<img class="post-media" src="${escapeHtml(imageUrl)}" alt="Trabalho publicado por ${escapeHtml(author.display_name || username || "criador")}" loading="lazy">` : ""}
@@ -166,8 +143,7 @@
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) {
-        const message = data?.error?.message || data?.detail || "Não foi possível carregar seu feed.";
-        throw new Error(message);
+        throw new Error(data?.error?.message || data?.detail || "Não foi possível carregar seu feed.");
       }
       return data;
     } finally {
@@ -180,12 +156,7 @@
     const composer = `<div class="composer-inline" data-action="open-composer">${avatar(me)}<p>Compartilhe o que está tomando forma...</p><span>＋</span></div>`;
     const body = posts.length
       ? posts.map(post => postCard(post, me)).join("")
-      : emptyState(
-          "✦",
-          "Seu pulso começa pelas conexões.",
-          "Siga criadores em Descobrir e o trabalho deles aparecerá aqui.",
-          '<a class="button button--ink" href="/explorar/">Descobrir criadores</a>'
-        );
+      : emptyState("✦", "Seu pulso começa pelas conexões.", "Siga criadores em Descobrir e o trabalho deles aparecerá aqui.", '<a class="button button--ink" href="/explorar/">Descobrir criadores</a>');
 
     pageContent.innerHTML = `${feedHeader()}${composer}<div id="post-list">${body}</div>`;
     pageContent.dataset.feedRecovered = "true";
@@ -193,25 +164,27 @@
   }
 
   function renderRetry(error) {
+    diagnostic("retry_rendered", error?.name || "Error");
     const message = error?.name === "AbortError"
       ? "A conexão demorou mais que o esperado."
       : (error?.message || "Não foi possível carregar seu feed.");
-
-    diagnostic("retry_rendered", error?.name || "Error");
     pageContent.innerHTML = `${feedHeader()}${emptyState("↻", "Não consegui mostrar seu feed.", message, '<button type="button" class="button button--ink" data-pulso-retry>Tentar novamente</button>')}`;
     pageContent.querySelector("[data-pulso-retry]")?.addEventListener("click", () => {
       pageContent.innerHTML = `${feedHeader()}<div class="page-loader"><i></i><span>Carregando seu feed...</span></div>`;
-      recoverStalledFeed();
+      scheduleRecovery(0, true);
     });
   }
 
   async function recoverStalledFeed() {
-    if (recovering || document.hidden || !loader()) return;
-    recovering = true;
-    window.clearTimeout(stallTimer);
-    stallTimer = null;
-    diagnostic("recovery_started");
+    recoveryTimer = null;
+    diagnostic("recovery_deadline", `visibility=${document.visibilityState}`);
+    if (recovering || !loader()) {
+      diagnostic("recovery_skipped", recovering ? "already_running" : "loader_gone");
+      return;
+    }
 
+    recovering = true;
+    diagnostic("recovery_started");
     try {
       const feedPromise = requestJson(`/api/v1/social/feed/?_pulso=${Date.now()}`).then(data => {
         diagnostic("feed_response_ok");
@@ -222,7 +195,10 @@
           diagnostic("me_response_ok");
           return data;
         })
-        .catch(() => ({}));
+        .catch(error => {
+          diagnostic("me_response_error", error?.name || "Error");
+          return {};
+        });
       const [feed, me] = await Promise.all([feedPromise, mePromise]);
       renderFeed(feed, me || {});
       diagnostic("render_success");
@@ -234,38 +210,37 @@
     }
   }
 
-  function armRecovery(delay = stallDelayMs) {
-    window.clearTimeout(stallTimer);
-    if (!loader() || document.hidden) return;
-    if (!armedReported) {
-      diagnostic("recovery_armed", `delay=${delay}`);
-      armedReported = true;
-    }
-    stallTimer = window.setTimeout(() => recoverStalledFeed(), delay);
+  function scheduleRecovery(delay = stallDelayMs, replace = false) {
+    if (!loader() || recovering) return;
+    if (recoveryTimer !== null && !replace) return;
+    if (recoveryTimer !== null) window.clearTimeout(recoveryTimer);
+    diagnostic("recovery_armed", `delay=${delay};visibility=${document.visibilityState}`);
+    recoveryTimer = window.setTimeout(recoverStalledFeed, delay);
   }
 
+  // Important: DOM mutations must never postpone the absolute recovery deadline.
+  // The main application can replace the loading markup while it initializes;
+  // the watchdog simply keeps its original timer and checks the DOM at deadline.
   const observer = new MutationObserver(() => {
-    if (loader()) armRecovery();
-    else window.clearTimeout(stallTimer);
+    if (loader() && recoveryTimer === null && !recovering) scheduleRecovery();
   });
   observer.observe(pageContent, { childList: true, subtree: true });
 
   window.addEventListener("pageshow", event => {
     if (event.persisted) diagnostic("pageshow_persisted");
-    if (event.persisted && loader()) armRecovery(100);
-    else armRecovery();
+    if (loader()) scheduleRecovery(event.persisted ? 100 : stallDelayMs, event.persisted);
   });
 
   document.addEventListener("visibilitychange", () => {
-    if (!document.hidden && loader()) armRecovery(250);
+    if (!document.hidden && loader()) scheduleRecovery(100, true);
   });
 
   window.addEventListener("online", () => {
-    if (loader()) armRecovery(100);
+    if (loader()) scheduleRecovery(100, true);
   });
 
-  // The normal app renderer gets the first chance. This watchdog runs before
-  // app.js so it can also capture synchronous runtime failures from the main
-  // bundle on mobile. It never reloads the document or replays mutating calls.
-  armRecovery();
+  // One absolute deadline is armed before app.js. It is not cancelled by DOM
+  // churn and it is allowed to complete while the page is backgrounded. Only
+  // idempotent GET requests are used by this recovery path.
+  scheduleRecovery();
 })();
