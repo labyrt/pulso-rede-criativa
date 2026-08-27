@@ -1,7 +1,9 @@
 import os
 from io import StringIO
+from pathlib import Path
 from unittest.mock import patch
 
+from django.conf import settings
 from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.db import DatabaseError
@@ -60,10 +62,23 @@ class ProductionHardeningTests(TestCase):
 
     def test_health_endpoint_fails_closed_when_database_is_unavailable(self):
         with patch("config.urls.connection.cursor", side_effect=DatabaseError("database unavailable")):
-            response = self.client.get("/health/")
+            with patch("config.urls.connection.close") as close_connection:
+                response = self.client.get("/health/")
 
         self.assertEqual(response.status_code, 503)
         self.assertEqual(response.json(), {"status": "degraded", "service": "pulso", "database": "unavailable"})
+        self.assertEqual(response.headers["Retry-After"], "3")
+        self.assertEqual(response.headers["Cache-Control"], "no-store")
+        close_connection.assert_called_once()
+
+    def test_neon_database_settings_bound_connection_lifetime_and_connect_wait(self):
+        source = Path(settings.BASE_DIR, "config", "settings.py").read_text(encoding="utf-8")
+
+        self.assertIn('"30" if IS_NEON_DATABASE else "600"', source)
+        self.assertIn('DB_CONNECT_TIMEOUT", "10"', source)
+        self.assertIn('database_options.setdefault("connect_timeout", DATABASE_CONNECT_TIMEOUT)', source)
+        self.assertIn('database_options.setdefault("sslmode", "require")', source)
+        self.assertIn('conn_health_checks=True', source)
 
     def test_health_endpoint_rejects_database_target_drift_before_connecting(self):
         env = {
@@ -92,6 +107,8 @@ class ProductionHardeningTests(TestCase):
             response.json(),
             {"status": "degraded", "service": "pulso", "database": "ok", "redis": "unavailable"},
         )
+        self.assertEqual(response.headers["Retry-After"], "3")
+        self.assertEqual(response.headers["Cache-Control"], "no-store")
 
     @override_settings(REDIS_URL="rediss://redis.example.invalid:6379")
     def test_health_endpoint_reports_redis_ready(self):
