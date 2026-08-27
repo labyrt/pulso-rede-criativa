@@ -1,3 +1,6 @@
+from pathlib import Path
+
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 
@@ -29,9 +32,25 @@ class MobileResilienceTests(TestCase):
         self.assertEqual(response.headers.get("Pragma"), "no-cache")
         self.assertIn("Cookie", response.headers.get("Vary", ""))
 
-    def test_app_uses_native_fetch_path_without_global_wrapper(self):
+    def test_app_uses_native_fetch_and_loads_lifecycle_recovery(self):
         response = self.client.get("/app/")
         html = response.content.decode("utf-8")
 
         self.assertIn("webapp/app.js", html)
+        self.assertIn("webapp/lifecycle-recovery.js", html)
         self.assertNotIn("webapp/resilience.js", html)
+        self.assertLess(html.index("webapp/app.js"), html.index("webapp/lifecycle-recovery.js"))
+
+    def test_lifecycle_recovery_handles_bfcache_and_stalled_cold_start_without_monkeypatching_fetch(self):
+        script = Path(settings.BASE_DIR, "static", "webapp", "lifecycle-recovery.js").read_text(encoding="utf-8")
+
+        self.assertIn('window.addEventListener("pageshow"', script)
+        self.assertIn("event.persisted", script)
+        self.assertIn("new AbortController()", script)
+        self.assertIn("/health/?_pulso=", script)
+        self.assertIn('cache: "no-store"', script)
+        self.assertIn("window.location.reload()", script)
+        self.assertIn("sessionStorage", script)
+        self.assertIn("reloadWindowMs = 120000", script)
+        self.assertIn('if (section === "feed") armRecovery();', script)
+        self.assertNotIn("window.fetch =", script)
