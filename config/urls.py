@@ -12,6 +12,16 @@ from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 from apps.webapp.database_guard import validate_database_target
 
 
+def _database_unavailable_response():
+    response = JsonResponse(
+        {"status": "degraded", "service": "pulso", "database": "unavailable"},
+        status=503,
+    )
+    response["Retry-After"] = "3"
+    response["Cache-Control"] = "no-store"
+    return response
+
+
 def healthcheck(_request):
     status = {"status": "ok", "service": "pulso", "database": "ok"}
 
@@ -31,21 +41,29 @@ def healthcheck(_request):
             )
 
     try:
+        # Scale-to-zero can invalidate an existing TCP session while Django is
+        # still alive. Discard it before probing and close it immediately on a
+        # failed reconnect so the next request starts from a clean state.
+        connection.close_if_unusable_or_obsolete()
         with connection.cursor() as cursor:
             cursor.execute("SELECT 1")
             cursor.fetchone()
     except DatabaseError:
-        return JsonResponse({"status": "degraded", "service": "pulso", "database": "unavailable"}, status=503)
+        connection.close()
+        return _database_unavailable_response()
 
     if settings.REDIS_URL:
         try:
             # A read-only cache lookup verifies TCP/TLS/auth without mutating data.
             cache.get("pulso:healthcheck")
         except Exception:
-            return JsonResponse(
+            response = JsonResponse(
                 {"status": "degraded", "service": "pulso", "database": "ok", "redis": "unavailable"},
                 status=503,
             )
+            response["Retry-After"] = "3"
+            response["Cache-Control"] = "no-store"
+            return response
         status["redis"] = "ok"
     else:
         status["redis"] = "disabled"
