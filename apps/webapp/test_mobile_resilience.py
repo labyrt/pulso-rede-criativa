@@ -41,21 +41,28 @@ class MobileResilienceTests(TestCase):
         self.assertNotIn("webapp/resilience.js", html)
         self.assertLess(html.index("webapp/app.js"), html.index("webapp/lifecycle-recovery.js"))
 
-    def test_lifecycle_recovery_handles_bfcache_and_stalled_cold_start_without_monkeypatching_fetch(self):
+    def test_feed_watchdog_recovers_stalled_dom_without_reloading_document(self):
         script = Path(settings.BASE_DIR, "static", "webapp", "lifecycle-recovery.js").read_text(encoding="utf-8")
 
         self.assertIn('window.addEventListener("pageshow"', script)
         self.assertIn("event.persisted", script)
         self.assertIn("new AbortController()", script)
-        self.assertIn("/health/?_pulso=", script)
+        self.assertIn('/api/v1/social/feed/?_pulso=', script)
+        self.assertIn('/api/v1/auth/me/?_pulso=', script)
         self.assertIn('cache: "no-store"', script)
-        self.assertIn("window.location.reload()", script)
-        self.assertIn("sessionStorage", script)
-        self.assertIn("reloadWindowMs = 120000", script)
-        self.assertIn("healthTimeoutMs = 12000", script)
-        self.assertIn("maxHealthAttempts = 2", script)
-        self.assertIn("healthAttempts >= maxHealthAttempts", script)
-        self.assertIn("showRetryState();", script)
-        self.assertIn("banco de dados ainda está acordando", script)
-        self.assertIn('if (section === "feed") armRecovery();', script)
+        self.assertIn("renderFeed(feed, me", script)
+        self.assertIn("pageContent.innerHTML", script)
+        self.assertIn("data-pulso-retry", script)
+        self.assertIn("requestTimeoutMs = 10000", script)
+        self.assertIn("stallDelayMs = 3500", script)
+        self.assertNotIn("window.location.reload()", script)
+        self.assertNotIn("sessionStorage", script)
         self.assertNotIn("window.fetch =", script)
+
+    def test_feed_watchdog_never_replays_mutating_requests(self):
+        script = Path(settings.BASE_DIR, "static", "webapp", "lifecycle-recovery.js").read_text(encoding="utf-8")
+
+        self.assertIn('method: "GET"', script)
+        self.assertNotIn('method: "POST"', script)
+        self.assertNotIn('method: "PATCH"', script)
+        self.assertNotIn('method: "DELETE"', script)
