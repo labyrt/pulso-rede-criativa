@@ -18,8 +18,13 @@ class PixView(APIView):
     def get(self, request, username):
         creator = get_object_or_404(User.objects.select_related("profile"), username=username, is_active=True)
         profile = creator.profile
-        if not (profile.pix_key and profile.pix_receiver_name and profile.pix_city):
-            return Response({"detail": "Este perfil ainda não ativou o apoio por Pix."}, status=status.HTTP_404_NOT_FOUND)
+        if not (
+            profile.pix_key_type == "random"
+            and profile.pix_key
+            and profile.pix_receiver_name
+            and profile.pix_city
+        ):
+            return Response({"detail": "Este perfil ainda não ativou o apoio por Pix com chave aleatória."}, status=status.HTTP_404_NOT_FOUND)
         amount = request.query_params.get("amount")
         try:
             amount_value = float(amount) if amount else None
