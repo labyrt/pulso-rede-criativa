@@ -5,8 +5,11 @@
   const RANDOM_PIX_EXAMPLE = "123e4567-e12b-12d1-a456-426655440000";
 
   function enhanceProfileSupport(root = document) {
-    const buttons = root.querySelectorAll?.('.outline-button--pink[data-action="support"]') || [];
-    buttons.forEach(button => {
+    const candidates = [];
+    if (root.matches?.('.outline-button--pink[data-action="support"]')) candidates.push(root);
+    root.querySelectorAll?.('.outline-button--pink[data-action="support"]').forEach(button => candidates.push(button));
+
+    candidates.forEach(button => {
       if (button.dataset.supportPolished === "true") return;
       button.dataset.supportPolished = "true";
       button.classList.add("profile-support-action");
@@ -16,7 +19,9 @@
   }
 
   function enhanceRandomPixForm(root = document) {
-    const form = root.matches?.("#profile-form") ? root : root.querySelector?.("#profile-form");
+    const form = root.matches?.("#profile-form")
+      ? root
+      : root.closest?.("#profile-form") || root.querySelector?.("#profile-form") || document.querySelector("#profile-form");
     if (!form) return;
 
     const typeSelect = form.querySelector('select[name="pix_key_type"]');
