@@ -27,7 +27,7 @@ class FeedProductionHardeningTests(TestCase):
         Follow.objects.create(follower=self.user, following=self.creator)
         self.client.force_authenticate(self.user)
 
-    def test_feed_relationship_flags_and_comment_preview_keep_existing_contract(self):
+    def test_feed_relationship_flags_counts_and_comment_preview_keep_existing_contract(self):
         post = Post.objects.create(author=self.creator, body="Processo em andamento", category="development")
         Like.objects.create(user=self.user, post=post)
         Bookmark.objects.create(user=self.user, post=post)
@@ -41,7 +41,25 @@ class FeedProductionHardeningTests(TestCase):
         self.assertTrue(item["is_liked"])
         self.assertTrue(item["is_bookmarked"])
         self.assertTrue(item["is_reposted"])
+        self.assertEqual(item["likes_count"], 1)
+        self.assertEqual(item["comments_count"], 1)
+        self.assertEqual(item["reposts_count"], 1)
         self.assertEqual(item["latest_comments"][0]["body"], "Primeira atualização")
+
+    def test_feed_includes_post_reposted_by_followed_creator_once(self):
+        outside_creator = User.objects.create_user(
+            username="outside",
+            email="outside@test.dev",
+            password="VeryStrong!123",
+        )
+        post = Post.objects.create(author=outside_creator, body="Descoberta via repost", category="development")
+        Repost.objects.create(user=self.creator, post=post)
+
+        response = self.client.get("/api/v1/social/feed/")
+
+        self.assertEqual(response.status_code, 200)
+        ids = [item["id"] for item in response.data["results"]]
+        self.assertEqual(ids.count(post.id), 1)
 
     def test_feed_query_count_does_not_grow_linearly_with_post_count(self):
         posts = [
@@ -60,8 +78,8 @@ class FeedProductionHardeningTests(TestCase):
         self.assertEqual(len(response.data["results"]), 8)
         self.assertLessEqual(
             len(queries),
-            20,
-            f"Feed executou {len(queries)} queries; esperado no máximo 20 para uma página.",
+            12,
+            f"Feed executou {len(queries)} queries; esperado no máximo 12 para uma página.",
         )
 
     def test_private_api_responses_are_not_cacheable(self):
