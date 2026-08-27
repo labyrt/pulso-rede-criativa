@@ -7,13 +7,15 @@
   const section = document.body.dataset.section;
   const reloadKey = "pulso:lifecycle-reload-at";
   const reloadWindowMs = 120000;
-  const stallDelayMs = 9000;
-  const healthTimeoutMs = 8000;
-  const retryDelayMs = 5000;
+  const stallDelayMs = 7000;
+  const healthTimeoutMs = 12000;
+  const retryDelayMs = 3000;
+  const maxHealthAttempts = 2;
 
   let stallTimer = null;
   let retryTimer = null;
   let recovering = false;
+  let healthAttempts = 0;
   let hiddenAt = document.hidden ? Date.now() : null;
 
   function loader() {
@@ -31,6 +33,7 @@
     stallTimer = null;
     retryTimer = null;
     recovering = false;
+    healthAttempts = 0;
     sessionStorage.removeItem(reloadKey);
   }
 
@@ -57,8 +60,8 @@
     retry.innerHTML = `
       <div>
         <div class="empty-orb">↻</div>
-        <h2>O PULSO demorou para acordar.</h2>
-        <p>O servidor gratuito já foi acionado. Tente novamente para carregar seu feed.</p>
+        <h2>O PULSO demorou para se conectar.</h2>
+        <p>O servidor ou o banco de dados ainda está acordando. Você pode tentar de novo sem perder nada.</p>
         <button type="button" class="button button--ink" data-pulso-retry>Tentar novamente</button>
       </div>`;
 
@@ -96,6 +99,7 @@
   async function recoverStalledLoader() {
     if (recovering || document.hidden || !loader()) return;
     recovering = true;
+    healthAttempts += 1;
 
     const ready = await healthIsReady();
     recovering = false;
@@ -106,7 +110,13 @@
     }
 
     if (ready) {
+      healthAttempts = 0;
       if (!reloadOnce()) showRetryState();
+      return;
+    }
+
+    if (healthAttempts >= maxHealthAttempts) {
+      showRetryState();
       return;
     }
 
@@ -149,8 +159,8 @@
     if (loader()) recoverStalledLoader();
   });
 
-  // On a fresh navigation the document is only served after Render has woken.
-  // On mobile BFCache/tab restoration, this timer detects the stale shell that
-  // can otherwise keep showing a spinner while no feed request reaches Django.
+  // A fresh navigation wakes the app server, while restoring an Android tab or
+  // BFCache entry can leave a stale shell on screen. This guard also covers the
+  // independent cold start of a serverless Postgres compute such as Neon.
   if (section === "feed") armRecovery();
 })();
