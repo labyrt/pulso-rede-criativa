@@ -1,3 +1,5 @@
+import re
+
 from django.contrib.auth import password_validation
 from django.contrib.auth.models import update_last_login
 from django.db import transaction
@@ -6,6 +8,11 @@ from rest_framework import serializers
 from apps.common.media import MediaUploadError, store_image
 
 from .models import Block, Follow, Profile, User
+
+
+RANDOM_PIX_KEY_RE = re.compile(
+    r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+)
 
 
 class RegisterSerializer(serializers.ModelSerializer):
@@ -121,7 +128,12 @@ class PublicProfileSerializer(serializers.ModelSerializer):
         return bool(request and request.user.is_authenticated and request.user.pk == obj.user_id)
 
     def get_pix_enabled(self, obj):
-        return bool(obj.pix_key_ciphertext and obj.pix_receiver_name and obj.pix_city)
+        return bool(
+            obj.pix_key_type == "random"
+            and obj.pix_key_ciphertext
+            and obj.pix_receiver_name
+            and obj.pix_city
+        )
 
 
 class ProfileUpdateSerializer(serializers.ModelSerializer):
@@ -173,6 +185,26 @@ class ProfileUpdateSerializer(serializers.ModelSerializer):
     def validate_password(self, value):
         password_validation.validate_password(value, self.instance.user)
         return value
+
+    def validate_pix_key_type(self, value):
+        normalized = value.strip().lower()
+        if normalized not in {"", "random"}:
+            raise serializers.ValidationError("A PULSO aceita apenas chave Pix aleatória.")
+        return normalized
+
+    def validate_pix_key(self, value):
+        normalized = value.strip().lower()
+        if normalized and not RANDOM_PIX_KEY_RE.fullmatch(normalized):
+            raise serializers.ValidationError(
+                "Use uma chave Pix aleatória válida, no formato gerado pelo seu banco."
+            )
+        return normalized
+
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        if "pix_key" in attrs:
+            attrs["pix_key_type"] = "random" if attrs["pix_key"] else ""
+        return attrs
 
     @transaction.atomic
     def update(self, instance, validated_data):
