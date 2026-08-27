@@ -1,0 +1,242 @@
+/* PULSO product polish: mobile-first geometry, theme parity and support affordances. */
+
+/* Landing preview: keep the simulated post readable instead of clipping it. */
+.hero-stage { overflow: visible; }
+.float-card--main { max-width: 520px; }
+.float-card--main > p { overflow-wrap: anywhere; }
+.creator-row > div { min-width: 0; }
+.creator-row strong,
+.creator-row small { overflow: hidden; text-overflow: ellipsis; }
+
+/* Profile cover geometry must be identical in light and dark themes. Fitting the
+   image to the full width prevents horizontal crop; framing stays vertical. */
+.profile-cover,
+html[data-theme="dark"] .profile-cover {
+    background-size: 100% auto !important;
+    background-repeat: no-repeat !important;
+    background-position-x: center !important;
+    transform: none !important;
+    filter: none !important;
+}
+
+/* Keep the framing control away from the avatar and the upload control. */
+.cover-position-button,
+html[data-theme="dark"] .cover-position-button {
+    left: auto !important;
+    right: 14px !important;
+    top: 14px !important;
+    bottom: auto !important;
+}
+
+/* Clear profile-level Pix support affordance. */
+.profile-support-action {
+    border-color: #d8397c !important;
+    color: #9c174e !important;
+    background: #fff6fa !important;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    white-space: nowrap;
+}
+.profile-support-action .profile-support-icon {
+    width: 23px;
+    height: 23px;
+    border-radius: 50%;
+    display: inline-grid;
+    place-items: center;
+    background: #ffdeeb;
+    color: #a81450;
+    font-size: 15px;
+    line-height: 1;
+}
+.profile-support-action:hover,
+.profile-support-action:focus-visible {
+    background: #fce7f0 !important;
+    color: #7f123f !important;
+}
+
+/* Pix configuration copy inserted by product-polish.js. */
+.pix-random-only {
+    grid-column: 1 / -1;
+    display: grid;
+    gap: 7px;
+    padding: 13px 14px;
+    border: 1px solid #d8d6cf;
+    border-radius: 14px;
+    background: #faf9f5;
+}
+.pix-random-only strong { font-size: 12px; }
+.pix-random-only small { color: var(--muted); line-height: 1.45; }
+.pix-random-only code {
+    font-size: 10px;
+    color: #6d3150;
+    overflow-wrap: anywhere;
+}
+
+/* Dark mode: explicitly set dialog/text colors because <dialog> does not
+   reliably inherit the body's color on every mobile browser. */
+html[data-theme="dark"] { --muted: #b9bbc3; }
+html[data-theme="dark"] .modal-card,
+html[data-theme="dark"] .support-card,
+html[data-theme="dark"] .likes-card,
+html[data-theme="dark"] .connections-card,
+html[data-theme="dark"] .cover-framing-card {
+    color: #f4f2ed;
+}
+html[data-theme="dark"] .modal-header h2,
+html[data-theme="dark"] .modal-card h2,
+html[data-theme="dark"] .likes-person-copy strong,
+html[data-theme="dark"] .connections-person-copy strong,
+html[data-theme="dark"] .social-comment-copy p,
+html[data-theme="dark"] .profile-bio,
+html[data-theme="dark"] .profile-main h1 {
+    color: #f4f2ed;
+}
+html[data-theme="dark"] .likes-person-copy small,
+html[data-theme="dark"] .likes-person-arrow,
+html[data-theme="dark"] .connections-person-copy small,
+html[data-theme="dark"] .profile-handle,
+html[data-theme="dark"] .profile-meta,
+html[data-theme="dark"] .post-head small,
+html[data-theme="dark"] .post-head time,
+html[data-theme="dark"] .page-header p,
+html[data-theme="dark"] .privacy-note,
+html[data-theme="dark"] .media-help {
+    color: #b9bbc3 !important;
+}
+html[data-theme="dark"] .pix-code {
+    background: #111216;
+    color: #eef0f5;
+    border: 1px solid #3d3f45;
+}
+html[data-theme="dark"] .pix-random-only {
+    background: #141519;
+    border-color: #3e4047;
+}
+html[data-theme="dark"] .pix-random-only code { color: #ff9ac5; }
+html[data-theme="dark"] .profile-support-action {
+    background: #301923 !important;
+    border-color: #82435e !important;
+    color: #ffb0d0 !important;
+}
+html[data-theme="dark"] .profile-support-action .profile-support-icon {
+    background: #4a2032;
+    color: #ffc1db;
+}
+html[data-theme="dark"] .comment-preview,
+html[data-theme="dark"] .likes-person,
+html[data-theme="dark"] .social-comment,
+html[data-theme="dark"] .connections-person {
+    border-color: #373940;
+}
+
+/* Landing is theme-aware too; previously some fixed dark text became illegible. */
+html[data-theme="dark"] .landing .brand--dark,
+html[data-theme="dark"] .landing-nav,
+html[data-theme="dark"] .landing .text-link,
+html[data-theme="dark"] .manifesto,
+html[data-theme="dark"] .landing-footer { color: #f4f2ed; }
+html[data-theme="dark"] .hero-copy > p,
+html[data-theme="dark"] .landing-footer,
+html[data-theme="dark"] .manifesto p { color: #c5c6cc; }
+html[data-theme="dark"] .landing .text-link { border-color: #f4f2ed; }
+html[data-theme="dark"] .landing .button--ghost { border-color: #f4f2ed; color: #f4f2ed; }
+html[data-theme="dark"] .float-card { color: #151517; }
+html[data-theme="dark"] .float-card small { color: #62636a; }
+html[data-theme="dark"] .feature--lime,
+html[data-theme="dark"] .feature--pink { color: #111214; }
+
+@media (max-width: 640px) {
+    /* Landing post simulation: fully readable and centered. */
+    .hero-stage {
+        min-height: 575px !important;
+        margin-top: 28px;
+        overflow: visible;
+    }
+    .float-card--main {
+        width: calc(100% - 18px) !important;
+        max-width: 430px;
+        left: 50% !important;
+        right: auto !important;
+        top: 8px !important;
+        padding: 15px !important;
+        transform: translateX(-50%) rotate(-1deg) !important;
+    }
+    .creator-row { gap: 10px; margin-bottom: 12px; }
+    .creator-row .avatar { width: 42px; height: 42px; }
+    .creator-row strong { font-size: 15px; }
+    .creator-row small { display: block; max-width: 180px; font-size: 11px; }
+    .badge-live { font-size: 8px; padding: 6px 8px; }
+    .art-preview { height: 185px !important; padding: 19px; }
+    .art-preview span { font-size: 31px; line-height: .88; }
+    .float-card--main > p {
+        display: block;
+        margin: 14px 2px 12px;
+        font-size: 13px;
+        line-height: 1.45;
+        max-height: none;
+        overflow: visible;
+    }
+    .social-counts { gap: 18px; justify-content: flex-start; }
+    .orb--lime { right: -38px; }
+    .orb--pink { left: -18px; }
+
+    /* Profile: no overlap between avatar and actions. */
+    .profile-cover,
+    html[data-theme="dark"] .profile-cover {
+        height: 205px;
+        background-size: 100% auto !important;
+    }
+    .profile-main { padding: 0 18px 28px; }
+    .profile-avatar {
+        width: 104px;
+        height: 104px;
+        margin-top: -48px;
+        border-width: 5px;
+    }
+    .profile-actions {
+        margin-top: 14px !important;
+        min-height: 0;
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        justify-content: stretch;
+        gap: 8px;
+    }
+    .profile-actions > button {
+        width: 100%;
+        min-width: 0;
+        padding-inline: 11px;
+    }
+    .profile-actions > button:last-child:nth-child(3) { grid-column: 1 / -1; }
+    .profile-main h1 { margin-top: 25px; }
+    .media-edit--cover {
+        right: 12px !important;
+        bottom: 12px !important;
+        top: auto !important;
+    }
+    .cover-position-button,
+    html[data-theme="dark"] .cover-position-button {
+        right: 12px !important;
+        top: 12px !important;
+        bottom: auto !important;
+        left: auto !important;
+    }
+    .profile-support-action { font-size: 12px; }
+    .profile-support-action .profile-support-icon { width: 21px; height: 21px; }
+
+    /* Make interaction sheets readable and comfortably sized. */
+    .likes-card,
+    .connections-card { color: inherit; }
+    .likes-person-copy strong,
+    .connections-person-copy strong { font-size: 13px; }
+    .likes-person-copy small,
+    .connections-person-copy small { font-size: 11px; }
+}
+
+@media (max-width: 380px) {
+    .float-card--main { width: calc(100% - 8px) !important; }
+    .badge-live { display: none; }
+    .profile-actions { grid-template-columns: 1fr; }
+    .profile-actions > button:last-child:nth-child(3) { grid-column: auto; }
+}
