@@ -1,4 +1,4 @@
-from django.db.models import Count, Exists, OuterRef, Prefetch, Q
+from django.db.models import Count, Exists, F, OuterRef, Prefetch, Q
 from rest_framework import permissions, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -25,6 +25,7 @@ def visible_posts_for(user):
         Comment.objects.filter(parent__isnull=True, author__profile__is_hidden=False)
         .exclude(author_id__in=blocked)
         .exclude(author_id__in=blocked_by)
+        .annotate(pulso_replies_count=Count("replies", distinct=True))
         .select_related("author", "author__profile")
         .order_by("-created_at")
     )
@@ -37,12 +38,12 @@ def visible_posts_for(user):
             pulso_is_liked=Exists(Like.objects.filter(post_id=OuterRef("pk"), user=user)),
             pulso_is_bookmarked=Exists(Bookmark.objects.filter(post_id=OuterRef("pk"), user=user)),
             pulso_is_reposted=Exists(Repost.objects.filter(post_id=OuterRef("pk"), user=user)),
+            pulso_likes_count=Count("likes", distinct=True),
+            pulso_comments_count=Count("comments", distinct=True),
+            pulso_reposts_count=Count("reposts", distinct=True),
         )
         .select_related("author", "author__profile")
         .prefetch_related(
-            "likes",
-            "reposts",
-            "comments",
             Prefetch("comments", queryset=visible_comments, to_attr="pulso_visible_comments"),
         )
     )
@@ -153,7 +154,12 @@ class IsPostAuthor(permissions.BasePermission):
 class FeedView(APIView):
     def get(self, request):
         following_ids = Follow.objects.filter(follower=request.user).values_list("following_id", flat=True)
-        posts = visible_posts_for(request.user).filter(Q(author_id__in=following_ids) | Q(reposts__user__in=following_ids)).distinct()
+        followed_reposts = Repost.objects.filter(post_id=OuterRef("pk"), user_id__in=following_ids)
+        posts = (
+            visible_posts_for(request.user)
+            .annotate(pulso_reposted_by_followed=Exists(followed_reposts))
+            .filter(Q(author_id__in=following_ids) | Q(pulso_reposted_by_followed=True))
+        )
         page = self.pagination_class()
         items = page.paginate_queryset(posts, request)
         serializer = PostSerializer(items, many=True, context={"request": request})
@@ -166,7 +172,9 @@ class FeedView(APIView):
 
 class ExploreView(APIView):
     def get(self, request):
-        posts = visible_posts_for(request.user).annotate(engagement=Count("likes") + Count("comments") * 2).order_by("-engagement", "-created_at")
+        posts = visible_posts_for(request.user).annotate(
+            engagement=F("pulso_likes_count") + F("pulso_comments_count") * 2
+        ).order_by("-engagement", "-created_at")
         category = request.query_params.get("category")
         if category:
             posts = posts.filter(category=category)
