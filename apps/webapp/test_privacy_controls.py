@@ -37,4 +37,4 @@ class PrivacyControlsWebTests(TestCase):
         self.assertIn('/block/`', script)
         self.assertIn('data-action="message-user"', script)
         self.assertIn('[data-follow]', script)
-        self.assertIn("Não poderão trocar novas mensagens", script)
+        self.assertIn("não poderão trocar novas mensagens", script)
