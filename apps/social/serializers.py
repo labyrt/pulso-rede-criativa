@@ -9,19 +9,23 @@ from .models import Bookmark, Comment, Like, Notification, Post, Repost
 
 class CommentSerializer(serializers.ModelSerializer):
     author = UserSummarySerializer(read_only=True)
-    replies_count = serializers.IntegerField(source="replies.count", read_only=True)
+    replies_count = serializers.SerializerMethodField()
 
     class Meta:
         model = Comment
         fields = ("id", "post", "author", "parent", "body", "replies_count", "created_at")
         read_only_fields = ("post", "author", "created_at")
 
+    def get_replies_count(self, obj):
+        value = getattr(obj, "pulso_replies_count", None)
+        return int(value) if value is not None else obj.replies.count()
+
 
 class PostSerializer(serializers.ModelSerializer):
     author = UserSummarySerializer(read_only=True)
-    likes_count = serializers.IntegerField(source="likes.count", read_only=True)
-    comments_count = serializers.IntegerField(source="comments.count", read_only=True)
-    reposts_count = serializers.IntegerField(source="reposts.count", read_only=True)
+    likes_count = serializers.SerializerMethodField()
+    comments_count = serializers.SerializerMethodField()
+    reposts_count = serializers.SerializerMethodField()
     is_liked = serializers.SerializerMethodField()
     is_bookmarked = serializers.SerializerMethodField()
     is_reposted = serializers.SerializerMethodField()
@@ -89,6 +93,22 @@ class PostSerializer(serializers.ModelSerializer):
         if len(tags) > 8:
             raise serializers.ValidationError("Use no máximo 8 tags.")
         return ",".join(dict.fromkeys(tags))
+
+    @staticmethod
+    def _count(obj, annotation, relation):
+        value = getattr(obj, annotation, None)
+        if value is not None:
+            return int(value)
+        return getattr(obj, relation).count()
+
+    def get_likes_count(self, obj):
+        return self._count(obj, "pulso_likes_count", "likes")
+
+    def get_comments_count(self, obj):
+        return self._count(obj, "pulso_comments_count", "comments")
+
+    def get_reposts_count(self, obj):
+        return self._count(obj, "pulso_reposts_count", "reposts")
 
     def _has(self, model, obj):
         request = self.context.get("request")
