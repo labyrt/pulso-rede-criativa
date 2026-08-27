@@ -6,10 +6,34 @@
   const section = document.body.dataset.section;
   if (!shell || !pageContent || section !== "feed") return;
 
+  const diagnostic = (event, detail = "") => {
+    const params = new URLSearchParams({ event });
+    if (detail) params.set("detail", String(detail).slice(0, 160));
+    fetch(`/api/v1/client-diagnostic/?${params}`, {
+      method: "GET",
+      credentials: "omit",
+      cache: "no-store",
+      keepalive: true,
+      headers: { Accept: "text/plain" },
+    }).catch(() => {});
+  };
+
+  diagnostic("watchdog_loaded", `visibility=${document.visibilityState}`);
+  window.addEventListener("error", event => {
+    const source = String(event.filename || "unknown").split("/").pop();
+    diagnostic("window_error", `${source}:${event.lineno || 0}:${event.colno || 0}`);
+  });
+  window.addEventListener("unhandledrejection", event => {
+    const reason = event.reason;
+    const label = reason?.name || reason?.constructor?.name || typeof reason;
+    diagnostic("unhandled_rejection", label);
+  });
+
   const stallDelayMs = 3500;
   const requestTimeoutMs = 10000;
   let stallTimer = null;
   let recovering = false;
+  let armedReported = false;
 
   const escapeHtml = (value = "") => String(value).replace(/[&<>'"]/g, character => ({
     "&": "&amp;",
@@ -173,6 +197,7 @@
       ? "A conexão demorou mais que o esperado."
       : (error?.message || "Não foi possível carregar seu feed.");
 
+    diagnostic("retry_rendered", error?.name || "Error");
     pageContent.innerHTML = `${feedHeader()}${emptyState("↻", "Não consegui mostrar seu feed.", message, '<button type="button" class="button button--ink" data-pulso-retry>Tentar novamente</button>')}`;
     pageContent.querySelector("[data-pulso-retry]")?.addEventListener("click", () => {
       pageContent.innerHTML = `${feedHeader()}<div class="page-loader"><i></i><span>Carregando seu feed...</span></div>`;
@@ -185,14 +210,24 @@
     recovering = true;
     window.clearTimeout(stallTimer);
     stallTimer = null;
+    diagnostic("recovery_started");
 
     try {
-      const [feed, me] = await Promise.all([
-        requestJson(`/api/v1/social/feed/?_pulso=${Date.now()}`),
-        requestJson(`/api/v1/auth/me/?_pulso=${Date.now()}`).catch(() => ({})),
-      ]);
+      const feedPromise = requestJson(`/api/v1/social/feed/?_pulso=${Date.now()}`).then(data => {
+        diagnostic("feed_response_ok");
+        return data;
+      });
+      const mePromise = requestJson(`/api/v1/auth/me/?_pulso=${Date.now()}`)
+        .then(data => {
+          diagnostic("me_response_ok");
+          return data;
+        })
+        .catch(() => ({}));
+      const [feed, me] = await Promise.all([feedPromise, mePromise]);
       renderFeed(feed, me || {});
+      diagnostic("render_success");
     } catch (error) {
+      diagnostic("render_error", error?.name || "Error");
       renderRetry(error);
     } finally {
       recovering = false;
@@ -202,6 +237,10 @@
   function armRecovery(delay = stallDelayMs) {
     window.clearTimeout(stallTimer);
     if (!loader() || document.hidden) return;
+    if (!armedReported) {
+      diagnostic("recovery_armed", `delay=${delay}`);
+      armedReported = true;
+    }
     stallTimer = window.setTimeout(() => recoverStalledFeed(), delay);
   }
 
@@ -212,6 +251,7 @@
   observer.observe(pageContent, { childList: true, subtree: true });
 
   window.addEventListener("pageshow", event => {
+    if (event.persisted) diagnostic("pageshow_persisted");
     if (event.persisted && loader()) armRecovery(100);
     else armRecovery();
   });
@@ -224,9 +264,8 @@
     if (loader()) armRecovery(100);
   });
 
-  // The normal app renderer always gets the first chance. This watchdog only
-  // intervenes when the API has completed but the loading element is still on
-  // screen, or when a restored mobile tab kept stale DOM. It never reloads the
-  // document and never repeats mutating requests.
+  // The normal app renderer gets the first chance. This watchdog runs before
+  // app.js so it can also capture synchronous runtime failures from the main
+  // bundle on mobile. It never reloads the document or replays mutating calls.
   armRecovery();
 })();
