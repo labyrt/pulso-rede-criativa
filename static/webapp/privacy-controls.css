@@ -1,0 +1,45 @@
+/* PULSO privacy controls */
+.profile-block-action {
+    border-color: #d2cbc8 !important;
+    color: #7f2d2d !important;
+    background: transparent !important;
+}
+
+.profile-block-action:hover,
+.profile-block-action:focus-visible {
+    border-color: #b64646 !important;
+    background: #fff4f3 !important;
+    color: #8f1f1f !important;
+}
+
+.profile-block-action[data-blocked="true"] {
+    border-color: #c9c8c3 !important;
+    color: var(--ink) !important;
+    background: var(--surface) !important;
+}
+
+html[data-theme="dark"] .profile-block-action {
+    border-color: #5b4548 !important;
+    color: #ffaaa8 !important;
+    background: transparent !important;
+}
+
+html[data-theme="dark"] .profile-block-action:hover,
+html[data-theme="dark"] .profile-block-action:focus-visible {
+    border-color: #96575c !important;
+    background: #321c20 !important;
+    color: #ffc1be !important;
+}
+
+html[data-theme="dark"] .profile-block-action[data-blocked="true"] {
+    border-color: #4b4d53 !important;
+    color: #f0eee9 !important;
+    background: #1a1b1f !important;
+}
+
+@media (max-width: 640px) {
+    .profile-actions .profile-block-action {
+        width: 100%;
+        min-width: 0;
+    }
+}
