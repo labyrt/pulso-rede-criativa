@@ -135,16 +135,18 @@ class AccountsAPITests(TestCase):
         self.assertEqual(response.status_code, 404)
 
     def test_pix_key_is_never_returned_and_is_encrypted(self):
+        random_key = "123e4567-e89b-12d3-a456-426655440000"
         self.client.force_authenticate(self.user)
         response = self.client.patch(
             reverse("me"),
-            {"pix_key_type": "email", "pix_key": "pix@test.dev", "pix_receiver_name": "LUNA", "pix_city": "SAO PAULO"},
+            {"pix_key_type": "random", "pix_key": random_key, "pix_receiver_name": "LUNA", "pix_city": "SAO PAULO"},
             format="json",
         )
         self.assertEqual(response.status_code, 200)
         self.user.profile.refresh_from_db()
-        self.assertNotEqual(self.user.profile.pix_key_ciphertext, "pix@test.dev")
-        self.assertEqual(self.user.profile.pix_key, "pix@test.dev")
+        self.assertNotEqual(self.user.profile.pix_key_ciphertext, random_key)
+        self.assertEqual(self.user.profile.pix_key, random_key)
+        self.assertEqual(self.user.profile.pix_key_type, "random")
         self.assertNotIn("pix_key", response.data)
 
     def test_profile_accepts_direct_image_upload_and_social_links(self):
