@@ -52,6 +52,7 @@ class PublicProfileSerializer(serializers.ModelSerializer):
     posts_count = serializers.SerializerMethodField()
     is_following = serializers.SerializerMethodField()
     is_own = serializers.SerializerMethodField()
+    is_blocked = serializers.SerializerMethodField()
     pix_enabled = serializers.SerializerMethodField()
     specialty_label = serializers.CharField(source="get_specialty_display", read_only=True)
 
@@ -83,6 +84,7 @@ class PublicProfileSerializer(serializers.ModelSerializer):
             "posts_count",
             "is_following",
             "is_own",
+            "is_blocked",
             "pix_enabled",
         )
 
@@ -97,7 +99,11 @@ class PublicProfileSerializer(serializers.ModelSerializer):
     def get_followers_count(self, obj):
         blocked, blocked_by = self._hidden_connection_ids()
         return (
-            obj.user.follower_links.filter(follower__profile__is_hidden=False)
+            obj.user.follower_links.filter(
+                follower__profile__is_hidden=False,
+                follower__is_staff=False,
+                follower__is_superuser=False,
+            )
             .exclude(follower_id__in=blocked)
             .exclude(follower_id__in=blocked_by)
             .count()
@@ -106,7 +112,11 @@ class PublicProfileSerializer(serializers.ModelSerializer):
     def get_following_count(self, obj):
         blocked, blocked_by = self._hidden_connection_ids()
         return (
-            obj.user.following_links.filter(following__profile__is_hidden=False)
+            obj.user.following_links.filter(
+                following__profile__is_hidden=False,
+                following__is_staff=False,
+                following__is_superuser=False,
+            )
             .exclude(following_id__in=blocked)
             .exclude(following_id__in=blocked_by)
             .count()
@@ -126,6 +136,15 @@ class PublicProfileSerializer(serializers.ModelSerializer):
     def get_is_own(self, obj):
         request = self.context.get("request")
         return bool(request and request.user.is_authenticated and request.user.pk == obj.user_id)
+
+    def get_is_blocked(self, obj):
+        request = self.context.get("request")
+        return bool(
+            request
+            and request.user.is_authenticated
+            and request.user.pk != obj.user_id
+            and Block.objects.filter(blocker=request.user, blocked=obj.user).exists()
+        )
 
     def get_pix_enabled(self, obj):
         return bool(

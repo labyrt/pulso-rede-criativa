@@ -26,7 +26,12 @@ def visible_people_for(user):
     blocked, blocked_by = blocked_user_ids(user)
     return (
         User.objects.select_related("profile")
-        .filter(is_active=True, profile__is_hidden=False)
+        .filter(
+            is_active=True,
+            is_staff=False,
+            is_superuser=False,
+            profile__is_hidden=False,
+        )
         .exclude(pk=user.pk)
         .exclude(pk__in=blocked)
         .exclude(pk__in=blocked_by)
@@ -100,8 +105,19 @@ class ProfileView(generics.RetrieveAPIView):
     def get_queryset(self):
         profiles = Profile.objects.select_related("user").filter(user__is_active=True)
         if self.request.user.is_authenticated:
-            return profiles.filter(Q(is_hidden=False) | Q(user=self.request.user))
-        return profiles.filter(is_hidden=False)
+            public_profile = Q(
+                is_hidden=False,
+                user__is_staff=False,
+                user__is_superuser=False,
+            )
+            profiles = profiles.filter(public_profile | Q(user=self.request.user))
+            blocked_by = Block.objects.filter(blocked=self.request.user).values_list("blocker_id", flat=True)
+            return profiles.exclude(user_id__in=blocked_by)
+        return profiles.filter(
+            is_hidden=False,
+            user__is_staff=False,
+            user__is_superuser=False,
+        )
 
 
 class DiscoverCreatorsView(generics.ListAPIView):
@@ -114,7 +130,14 @@ class DiscoverCreatorsView(generics.ListAPIView):
 
 class FollowView(APIView):
     def post(self, request, username):
-        target = generics.get_object_or_404(User.objects.select_related("profile"), username=username, is_active=True, profile__is_hidden=False)
+        target = generics.get_object_or_404(
+            User.objects.select_related("profile"),
+            username=username,
+            is_active=True,
+            is_staff=False,
+            is_superuser=False,
+            profile__is_hidden=False,
+        )
         if target == request.user:
             return Response({"detail": "Você não pode seguir a si mesma."}, status=status.HTTP_400_BAD_REQUEST)
         if Block.objects.filter(Q(blocker=request.user, blocked=target) | Q(blocker=target, blocked=request.user)).exists():
@@ -124,7 +147,13 @@ class FollowView(APIView):
             Notification.objects.create(recipient=target, actor=request.user, kind=Notification.Kind.FOLLOW)
         else:
             follow.delete()
-        followers_count = target.follower_links.filter(follower__profile__is_hidden=False).count()
+        followers_count = (
+            target.follower_links.filter(
+                follower__profile__is_hidden=False,
+                follower__is_staff=False,
+                follower__is_superuser=False,
+            ).count()
+        )
         return Response({"following": created, "followers_count": followers_count})
 
 
@@ -132,8 +161,17 @@ class ConnectionsView(generics.ListAPIView):
     serializer_class = UserSummarySerializer
 
     def get_queryset(self):
-        user = generics.get_object_or_404(User.objects.select_related("profile"), username=self.kwargs["username"], is_active=True)
-        if user.profile.is_hidden and user != self.request.user:
+        user = generics.get_object_or_404(
+            User.objects.select_related("profile"),
+            username=self.kwargs["username"],
+            is_active=True,
+        )
+        if (
+            (user.profile.is_hidden or user.is_staff or user.is_superuser)
+            and user != self.request.user
+        ):
+            raise Http404
+        if Block.objects.filter(blocker=user, blocked=self.request.user).exists():
             raise Http404
 
         kind = self.kwargs["kind"]
@@ -147,7 +185,13 @@ class ConnectionsView(generics.ListAPIView):
         blocked, blocked_by = blocked_user_ids(self.request.user)
         return (
             User.objects.select_related("profile")
-            .filter(pk__in=ids, is_active=True, profile__is_hidden=False)
+            .filter(
+                pk__in=ids,
+                is_active=True,
+                is_staff=False,
+                is_superuser=False,
+                profile__is_hidden=False,
+            )
             .exclude(pk__in=blocked)
             .exclude(pk__in=blocked_by)
             .order_by("profile__display_name", "username")

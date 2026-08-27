@@ -22,7 +22,12 @@ def hidden_user_ids(user):
 def visible_posts_for(user):
     blocked, blocked_by = hidden_user_ids(user)
     visible_comments = (
-        Comment.objects.filter(parent__isnull=True, author__profile__is_hidden=False)
+        Comment.objects.filter(
+            parent__isnull=True,
+            author__profile__is_hidden=False,
+            author__is_staff=False,
+            author__is_superuser=False,
+        )
         .exclude(author_id__in=blocked)
         .exclude(author_id__in=blocked_by)
         .annotate(pulso_replies_count=Count("replies", distinct=True))
@@ -31,7 +36,14 @@ def visible_posts_for(user):
     )
     return (
         Post.objects.filter(is_published=True)
-        .filter(Q(author__profile__is_hidden=False) | Q(author=user))
+        .filter(
+            Q(author=user)
+            | Q(
+                author__profile__is_hidden=False,
+                author__is_staff=False,
+                author__is_superuser=False,
+            )
+        )
         .exclude(author_id__in=blocked)
         .exclude(author_id__in=blocked_by)
         .annotate(
@@ -51,7 +63,11 @@ def visible_posts_for(user):
 
 def visible_people_relation(queryset, request, user_field):
     blocked, blocked_by = hidden_user_ids(request.user)
-    filters = {f"{user_field}__profile__is_hidden": False}
+    filters = {
+        f"{user_field}__profile__is_hidden": False,
+        f"{user_field}__is_staff": False,
+        f"{user_field}__is_superuser": False,
+    }
     return queryset.filter(**filters).exclude(**{f"{user_field}_id__in": blocked}).exclude(**{f"{user_field}_id__in": blocked_by})
 
 

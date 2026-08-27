@@ -13,6 +13,14 @@ from .models import CallSession, Conversation, Message
 from .serializers import CallSessionSerializer, ConversationSerializer, MessageSerializer
 
 
+def conversation_has_block(conversation, user):
+    other_ids = conversation.participants.exclude(pk=user.pk).values_list("pk", flat=True)
+    return Block.objects.filter(
+        Q(blocker=user, blocked_id__in=other_ids)
+        | Q(blocker_id__in=other_ids, blocked=user)
+    ).exists()
+
+
 class ConversationViewSet(viewsets.ModelViewSet):
     serializer_class = ConversationSerializer
     http_method_names = ["get", "post", "head", "options"]
@@ -37,7 +45,14 @@ class ConversationViewSet(viewsets.ModelViewSet):
 
     def create(self, request, *args, **kwargs):
         username = request.data.get("username", "").strip().lower()
-        target = get_object_or_404(User.objects.select_related("profile"), username=username, is_active=True, profile__is_hidden=False)
+        target = get_object_or_404(
+            User.objects.select_related("profile"),
+            username=username,
+            is_active=True,
+            is_staff=False,
+            is_superuser=False,
+            profile__is_hidden=False,
+        )
         if target == request.user:
             return Response({"detail": "Escolha outra pessoa."}, status=status.HTTP_400_BAD_REQUEST)
         if Block.objects.filter(blocker__in=[request.user, target], blocked__in=[request.user, target]).exists():
@@ -84,6 +99,11 @@ class ConversationViewSet(viewsets.ModelViewSet):
                 response["X-Oldest-Message"] = str(chunk[0].pk)
             return response
 
+        if conversation_has_block(conversation, request.user):
+            return Response(
+                {"detail": "Não é possível enviar mensagens enquanto houver um bloqueio."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
         serializer = MessageSerializer(data=request.data, context={"request": request})
         serializer.is_valid(raise_exception=True)
         message = serializer.save(conversation=conversation, sender=request.user)
@@ -95,6 +115,11 @@ class ConversationViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["post"])
     def calls(self, request, pk=None):
         conversation = self.get_object()
+        if conversation_has_block(conversation, request.user):
+            return Response(
+                {"detail": "Não é possível iniciar chamadas enquanto houver um bloqueio."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
         serializer = CallSessionSerializer(data={**request.data, "conversation": conversation.pk})
         serializer.is_valid(raise_exception=True)
         call = serializer.save(conversation=conversation, caller=request.user)
