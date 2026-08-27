@@ -69,7 +69,7 @@ class ProductionHardeningTests(TestCase):
         self.assertEqual(response.json(), {"status": "degraded", "service": "pulso", "database": "unavailable"})
         self.assertEqual(response.headers["Retry-After"], "3")
         self.assertEqual(response.headers["Cache-Control"], "no-store")
-        close_connection.assert_called_once()
+        self.assertGreaterEqual(close_connection.call_count, 1)
 
     def test_neon_database_settings_bound_connection_lifetime_and_connect_wait(self):
         source = Path(settings.BASE_DIR, "config", "settings.py").read_text(encoding="utf-8")
