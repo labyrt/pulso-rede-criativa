@@ -139,16 +139,24 @@
     return Number.isFinite(count) && count > 0 ? count : 0;
   }
 
+  function setTextIfChanged(node, value) {
+    if (node && node.textContent !== value) node.textContent = value;
+  }
+
   function syncLikesViewer(card) {
     const viewer = card.querySelector("[data-social-action='show-likes']");
     if (!viewer) return;
+
     const count = likeCountFor(card);
-    const countNode = viewer.querySelector("[data-social-like-count]");
-    if (countNode) countNode.textContent = String(count);
-    const labelNode = viewer.querySelector("[data-social-like-label]");
-    if (labelNode) labelNode.textContent = count === 1 ? "Ver quem curtiu" : "Ver quem curtiu";
-    viewer.disabled = count === 0;
-    viewer.setAttribute("aria-label", count === 0 ? "Nenhuma curtida nesta publicação" : `Ver as ${count} curtidas desta publicação`);
+    const countText = String(count);
+    const labelText = "Ver quem curtiu";
+    const ariaLabel = count === 0 ? "Nenhuma curtida nesta publicação" : `Ver as ${count} curtidas desta publicação`;
+    const disabled = count === 0;
+
+    setTextIfChanged(viewer.querySelector("[data-social-like-count]"), countText);
+    setTextIfChanged(viewer.querySelector("[data-social-like-label]"), labelText);
+    if (viewer.disabled !== disabled) viewer.disabled = disabled;
+    if (viewer.getAttribute("aria-label") !== ariaLabel) viewer.setAttribute("aria-label", ariaLabel);
   }
 
   function addLikesViewer(card) {
@@ -251,12 +259,23 @@
         enhanceWithin(node);
         refreshAfterInlineComment(node);
       }
-      const card = record.target instanceof Element ? record.target.closest?.("[data-post]") : null;
+
+      const target = record.target instanceof Element ? record.target : record.target?.parentElement;
+      if (!target) continue;
+
+      // Never react to mutations produced by the likes viewer itself. Without
+      // this guard, updating its text can enqueue another MutationObserver
+      // callback forever and starve timers/rendering on mobile browsers.
+      if (target.closest?.("[data-social-action='show-likes']")) continue;
+
+      const likeButton = target.closest?.('[data-post-action="like"]');
+      if (!likeButton) continue;
+      const card = likeButton.closest("[data-post]");
       if (card) syncLikesViewer(card);
     }
   });
 
-  mutationObserver.observe(pageContent, { childList: true, subtree: true, characterData: true });
+  mutationObserver.observe(pageContent, { childList: true, subtree: true });
   pageContent.querySelectorAll("[data-post]").forEach(enhanceCard);
 
   document.addEventListener("click", event => {

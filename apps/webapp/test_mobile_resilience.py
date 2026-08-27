@@ -71,6 +71,16 @@ class MobileResilienceTests(TestCase):
         self.assertNotIn('method: "PATCH"', script)
         self.assertNotIn('method: "DELETE"', script)
 
+    def test_social_observer_cannot_feedback_on_its_own_likes_viewer_updates(self):
+        script = Path(settings.BASE_DIR, "static", "webapp", "social-interactions.js").read_text(encoding="utf-8")
+
+        self.assertIn("function setTextIfChanged", script)
+        self.assertIn("if (node && node.textContent !== value)", script)
+        self.assertIn("[data-social-action='show-likes']", script)
+        self.assertIn("if (target.closest?.(\"[data-social-action='show-likes']\")) continue;", script)
+        self.assertIn("mutationObserver.observe(pageContent, { childList: true, subtree: true });", script)
+        self.assertNotIn("characterData: true", script)
+
     def test_client_diagnostic_endpoint_is_database_independent_and_no_store(self):
         self.client.logout()
         response = self.client.get("/api/v1/client-diagnostic/?event=watchdog_loaded&detail=test")
