@@ -139,6 +139,7 @@
 
   function connectEvents() {
     clearTimeout(live.reconnectTimer);
+    if (live.eventsSocket && [WebSocket.OPEN, WebSocket.CONNECTING].includes(live.eventsSocket.readyState)) return;
     const scheme = location.protocol === "https:" ? "wss" : "ws";
     const socket = new WebSocket(`${scheme}://${location.host}/ws/events/`);
     live.eventsSocket = socket;
@@ -148,6 +149,16 @@
     socket.onclose = () => {
       if (live.eventsSocket === socket) live.reconnectTimer = setTimeout(connectEvents, 2500);
     };
+  }
+
+  async function waitForEventsSocket(timeoutMs = 5000) {
+    connectEvents();
+    const started = Date.now();
+    while (Date.now() - started < timeoutMs) {
+      if (live.eventsSocket?.readyState === WebSocket.OPEN) return true;
+      await new Promise(resolve => setTimeout(resolve, 50));
+    }
+    throw new Error("A conexão de chamada ainda não está pronta. Tente novamente.");
   }
 
   function sendEvent(payload) {
@@ -165,16 +176,20 @@
     return actor?.display_name || actor?.username || "Alguém";
   }
 
-  function notificationCopy(kind, actor) {
-    const name = actorName(actor);
+  function activityAction(kind) {
     return {
-      follow: `${name} começou a seguir você.`,
-      like: `${name} curtiu sua publicação.`,
-      comment: `${name} comentou na sua publicação.`,
-      repost: `${name} compartilhou sua publicação.`,
-      post: `${name} publicou algo novo.`,
-      call: `${name} ligou para você.`,
-    }[kind] || `${name} interagiu com você.`;
+      follow: "começou a seguir você",
+      like: "curtiu sua publicação",
+      comment: "comentou na sua publicação",
+      repost: "compartilhou sua publicação",
+      post: "publicou algo novo",
+      call: "ligou para você",
+      message: "enviou uma mensagem",
+    }[kind] || "interagiu com você";
+  }
+
+  function notificationCopy(kind, actor) {
+    return `${actorName(actor)} ${activityAction(kind)}.`;
   }
 
   async function showSystemNotification(title, body, url, options = {}) {
@@ -198,10 +213,15 @@
   function prependActivity(data) {
     if (section !== "notifications") return;
     const list = document.querySelector("#notifications");
-    if (!list || list.querySelector(".empty-state")) return;
+    if (!list || list.querySelector(".page-loader")) return;
+    if (list.querySelector(".empty-state")) list.innerHTML = "";
     const item = document.createElement("div");
     item.className = "notification-item unread live-arrival";
-    item.innerHTML = `${data.actor?.avatar_url ? `<span class="avatar"><img src="${escapeHtml(data.actor.avatar_url)}" alt=""></span>` : '<span class="avatar">P</span>'}<p><strong>${escapeHtml(actorName(data.actor))}</strong> ${escapeHtml(notificationCopy(data.kind, { display_name: "" }).replace(/^\s*/, ""))}</p><time>agora</time>`;
+    const initials = (actorName(data.actor) || "P").split(/\s+/).slice(0, 2).map(part => part[0]).join("").toUpperCase();
+    const avatar = data.actor?.avatar_url
+      ? `<span class="avatar"><img src="${escapeHtml(data.actor.avatar_url)}" alt=""></span>`
+      : `<span class="avatar">${escapeHtml(initials)}</span>`;
+    item.innerHTML = `${avatar}<p><strong>${escapeHtml(actorName(data.actor))}</strong> ${escapeHtml(activityAction(data.kind))}${data.post_excerpt ? `<br><small>“${escapeHtml(data.post_excerpt)}”</small>` : ""}</p><time>agora</time>`;
     list.prepend(item);
   }
 
@@ -219,11 +239,13 @@
 
     if (data.type === "message") {
       live.notificationCount += 1;
-      live.messageCount += 1;
+      const activeId = currentConversationId();
+      const isReadingConversation = !document.hidden && section === "messages" && activeId === Number(data.conversation_id);
+      if (!isReadingConversation) live.messageCount += 1;
+      else requestJson(`/api/v1/chat/conversations/${data.conversation_id}/messages/?limit=20`).catch(() => null);
       renderBadges();
       const copy = `${actorName(data.actor)} enviou uma mensagem.`;
-      const activeId = currentConversationId();
-      if (!document.hidden && !(section === "messages" && activeId === Number(data.conversation_id))) toast(copy);
+      if (!document.hidden && !isReadingConversation) toast(copy);
       if (document.hidden) showSystemNotification("Nova mensagem no PULSO", "Abra o PULSO para ver a mensagem.", data.url || "/mensagens/", { tag: `pulso-message-${data.conversation_id}`, renotify: true });
       markActivityReadIfOpen();
       return;
@@ -242,9 +264,7 @@
       return;
     }
 
-    if (data.type === "call_signal") {
-      handleCallSignal(data);
-    }
+    if (data.type === "call_signal") handleCallSignal(data);
   }
 
   function callModal() { return document.querySelector("#call-modal"); }
@@ -275,21 +295,22 @@
       };
       peer.onconnectionstatechange = () => {
         if (peer.connectionState === "connected") setCallStatus("Na chamada");
-        if (["failed", "closed"].includes(peer.connectionState)) cleanupCall(false);
+        if (["failed", "closed"].includes(peer.connectionState)) cleanupCall(true);
       };
       return peer;
     });
   }
 
   function sendCallSignal(signal) {
-    if (!live.conversationId) return;
-    sendEvent({ type: "call.signal", conversation_id: live.conversationId, signal: { ...signal, call_id: live.callId } });
+    if (!live.conversationId) return false;
+    return sendEvent({ type: "call.signal", conversation_id: live.conversationId, signal: { ...signal, call_id: live.callId } });
   }
 
   async function startLiveCall(kind) {
     const conversationId = currentConversationId();
     if (!conversationId) { toast("Abra uma conversa antes de ligar."); return; }
     try {
+      await waitForEventsSocket();
       live.conversationId = conversationId;
       live.callKind = kind;
       await openLocalMedia(kind);
@@ -304,10 +325,10 @@
       const peer = await createPeer(kind);
       const offer = await peer.createOffer();
       await peer.setLocalDescription(offer);
-      sendCallSignal({ description: peer.localDescription, kind });
+      if (!sendCallSignal({ description: peer.localDescription, kind })) throw new Error("A sinalização da chamada foi interrompida.");
     } catch (error) {
       toast(error.name === "NotAllowedError" ? "Permita câmera e microfone para ligar." : error.message);
-      cleanupCall(false);
+      cleanupCall(true);
     }
   }
 
@@ -335,6 +356,7 @@
     if (!incoming) return;
     document.querySelector("#incoming-call-card")?.remove();
     try {
+      await waitForEventsSocket();
       await openLocalMedia(incoming.kind);
       const modal = callModal();
       if (modal && !modal.open) modal.showModal();
@@ -358,13 +380,12 @@
       await requestJson(`/api/v1/chat/calls/${incoming.call_id}/status/`, { method: "POST", body: JSON.stringify({ status: "declined" }) }).catch(() => null);
       sendCallSignal({ hangup: true, reason: "declined" });
     }
-    live.incoming = null;
-    cleanupCall(false);
+    cleanupCall(true);
   }
 
   async function applyCallSignal(signal) {
     if (signal.hangup) {
-      cleanupCall(false);
+      cleanupCall(true);
       toast(signal.reason === "declined" ? "A ligação foi recusada." : "A ligação terminou.");
       return;
     }
@@ -406,7 +427,12 @@
     live.pendingCandidates.length = 0;
     live.pendingSignals.length = 0;
     document.querySelector("#incoming-call-card")?.remove();
-    if (closeModal) callModal()?.close();
+    const modal = callModal();
+    if (closeModal && modal?.open) modal.close();
+    const localVideo = document.querySelector("#local-video");
+    const remoteVideo = document.querySelector("#remote-video");
+    if (localVideo) localVideo.srcObject = null;
+    if (remoteVideo) remoteVideo.srcObject = null;
     live.callId = null;
     live.conversationId = null;
     live.callKind = null;
@@ -423,6 +449,14 @@
   }
 
   document.addEventListener("click", event => {
+    const modal = callModal();
+    if (modal && event.target === modal && modal.open && (live.peer || live.callId || live.incoming)) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      endLiveCall();
+      return;
+    }
+
     const callButton = event.target.closest("[data-call]");
     if (callButton) {
       event.preventDefault();
