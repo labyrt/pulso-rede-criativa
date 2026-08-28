@@ -32,6 +32,10 @@ PROVIDERS = {
 }
 
 
+class PulsoNativeRedirect(HttpResponseRedirect):
+    allowed_schemes = ["pulso"]
+
+
 def _b64url(raw: bytes) -> str:
     return base64.urlsafe_b64encode(raw).rstrip(b"=").decode("ascii")
 
@@ -100,7 +104,7 @@ def native_auth_complete(request):
         timeout=CODE_TTL,
     )
     cache.delete(pending_key)
-    return HttpResponseRedirect(f"pulso://auth/callback?{urlencode({'code': code})}")
+    return PulsoNativeRedirect(f"pulso://auth/callback?{urlencode({'code': code})}")
 
 
 @require_GET
