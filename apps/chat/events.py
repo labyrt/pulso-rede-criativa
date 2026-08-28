@@ -8,7 +8,7 @@ from django.db.models import Q
 from apps.accounts.models import Block
 from apps.common.realtime import user_group_name
 
-from .models import CallSession, Conversation
+from .models import CallSession
 
 
 class UserEventsConsumer(AsyncJsonWebsocketConsumer):
@@ -52,15 +52,34 @@ class UserEventsConsumer(AsyncJsonWebsocketConsumer):
         except (TypeError, ValueError):
             return
 
-        recipient_ids = await self._call_recipients(conversation_id, call_id, self.scope["user"].pk)
-        if not recipient_ids:
+        call_context = await self._call_context(conversation_id, call_id, self.scope["user"].pk)
+        if not call_context:
             return
+
+        # Re-announce a ringing call immediately before caller-originated signaling.
+        # This makes a receiver that reconnected after the original event establish
+        # the correct call_id before an offer/candidate reaches the browser.
+        if call_context["sender_is_caller"]:
+            incoming_payload = {
+                "call_id": call_context["call_id"],
+                "conversation_id": conversation_id,
+                "kind": call_context["kind"],
+                "actor": call_context["caller"],
+                "created_at": call_context["started_at"],
+                "url": "/mensagens/",
+            }
+            for recipient_id in call_context["recipient_ids"]:
+                await self.channel_layer.group_send(
+                    user_group_name(recipient_id),
+                    {"type": "user.event", "event_type": "incoming_call", "payload": incoming_payload},
+                )
+
         payload = {
             "conversation_id": conversation_id,
             "sender_id": self.scope["user"].pk,
             "signal": signal,
         }
-        for recipient_id in recipient_ids:
+        for recipient_id in call_context["recipient_ids"]:
             await self.channel_layer.group_send(
                 user_group_name(recipient_id),
                 {"type": "user.event", "event_type": "call_signal", "payload": payload},
@@ -70,25 +89,38 @@ class UserEventsConsumer(AsyncJsonWebsocketConsumer):
         await self.send_json({"type": event["event_type"], **event.get("payload", {})})
 
     @database_sync_to_async
-    def _call_recipients(self, conversation_id, call_id, user_id):
+    def _call_context(self, conversation_id, call_id, user_id):
         call = (
-            CallSession.objects.filter(
+            CallSession.objects.select_related("caller", "caller__profile", "conversation")
+            .filter(
                 pk=call_id,
                 conversation_id=conversation_id,
                 conversation__participants__pk=user_id,
                 status__in=[CallSession.Status.RINGING, CallSession.Status.ACTIVE],
             )
-            .select_related("conversation")
             .first()
         )
         if not call:
-            return []
-        conversation = Conversation.objects.get(pk=conversation_id)
-        recipient_ids = list(conversation.participants.exclude(pk=user_id).values_list("pk", flat=True))
+            return None
+        recipient_ids = list(call.conversation.participants.exclude(pk=user_id).values_list("pk", flat=True))
         if not recipient_ids:
-            return []
+            return None
         blocked = Block.objects.filter(
             Q(blocker_id=user_id, blocked_id__in=recipient_ids)
             | Q(blocker_id__in=recipient_ids, blocked_id=user_id)
         ).exists()
-        return [] if blocked else recipient_ids
+        if blocked:
+            return None
+        return {
+            "call_id": call.pk,
+            "kind": call.kind,
+            "started_at": call.started_at.isoformat(),
+            "sender_is_caller": call.caller_id == user_id,
+            "recipient_ids": recipient_ids,
+            "caller": {
+                "id": call.caller_id,
+                "username": call.caller.username,
+                "display_name": call.caller.profile.name,
+                "avatar_url": call.caller.profile.avatar_url or "",
+            },
+        }
