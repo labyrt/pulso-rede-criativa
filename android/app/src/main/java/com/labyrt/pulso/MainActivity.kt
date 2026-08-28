@@ -219,12 +219,8 @@ class MainActivity : ComponentActivity() {
         }
 
         prefs.edit().remove(NATIVE_AUTH_VERIFIER).apply()
-        val target = Uri.parse("${BuildConfig.PULSO_BASE_URL}/native-auth/consume/")
-            .buildUpon()
-            .appendQueryParameter("code", code)
-            .appendQueryParameter("verifier", verifier)
-            .build()
-        webView.loadUrl(target.toString())
+        val body = "code=$code&verifier=$verifier".toByteArray(Charsets.UTF_8)
+        webView.postUrl("${BuildConfig.PULSO_BASE_URL}/native-auth/consume/", body)
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
