@@ -58,6 +58,7 @@ def visible_posts_for(user):
         .prefetch_related(
             Prefetch("comments", queryset=visible_comments, to_attr="pulso_visible_comments"),
         )
+        .order_by("-created_at", "-id")
     )
 
 
@@ -175,6 +176,7 @@ class FeedView(APIView):
             visible_posts_for(request.user)
             .annotate(pulso_reposted_by_followed=Exists(followed_reposts))
             .filter(Q(author_id__in=following_ids) | Q(pulso_reposted_by_followed=True))
+            .order_by("-created_at", "-id")
         )
         page = self.pagination_class()
         items = page.paginate_queryset(posts, request)
