@@ -64,6 +64,7 @@ class NativeAuthTests(TestCase):
         response = self.client.get("/native-auth/complete/", {"handoff": handoff})
         self.assertEqual(response.status_code, 302)
         self.assertTrue(response.url.startswith("pulso://auth/callback?"))
+        self.assertEqual(response["Cache-Control"], "no-store, private")
         code = parse_qs(urlparse(response.url).query)["code"][0]
         payload = cache.get(f"pulso:native-auth:code:{code}")
         self.assertEqual(payload["user_id"], self.user.pk)
@@ -79,7 +80,14 @@ class NativeAuthTests(TestCase):
             timeout=60,
         )
 
-        wrong = self.client.get(
+        get_attempt = self.client.get(
+            "/native-auth/consume/",
+            {"code": code, "verifier": self.verifier},
+        )
+        self.assertEqual(get_attempt.status_code, 405)
+        self.assertIsNotNone(cache.get(code_key))
+
+        wrong = self.client.post(
             "/native-auth/consume/",
             {"code": code, "verifier": "C" * 43},
         )
@@ -87,16 +95,17 @@ class NativeAuthTests(TestCase):
         self.assertEqual(wrong.url, "/entrar/")
         self.assertIsNotNone(cache.get(code_key))
 
-        response = self.client.get(
+        response = self.client.post(
             "/native-auth/consume/",
             {"code": code, "verifier": self.verifier},
         )
         self.assertEqual(response.status_code, 302)
         self.assertEqual(response.url, "/app/")
+        self.assertEqual(response["Cache-Control"], "no-store, private")
         self.assertEqual(int(self.client.session["_auth_user_id"]), self.user.pk)
         self.assertIsNone(cache.get(code_key))
 
-        replay = self.client.get(
+        replay = self.client.post(
             "/native-auth/consume/",
             {"code": code, "verifier": self.verifier},
         )
