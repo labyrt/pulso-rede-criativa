@@ -2,7 +2,7 @@ from pathlib import Path
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from apps.accounts.models import Follow
 from apps.chat.models import CallSession, Conversation
@@ -12,6 +12,12 @@ from apps.social.models import Notification, Post
 User = get_user_model()
 
 
+@override_settings(
+    STORAGES={
+        "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+        "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
+    }
+)
 class PwaDeliveryTests(TestCase):
     def setUp(self):
         self.user = User.objects.create_user(
