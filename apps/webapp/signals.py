@@ -113,12 +113,13 @@ def broadcast_message(sender, instance, created, **kwargs):
 
 
 @receiver(post_save, sender=CallSession)
-def broadcast_incoming_call(sender, instance, created, **kwargs):
+def persist_incoming_call_activity(sender, instance, created, **kwargs):
+    """Persist call activity; the live ringing event is emitted with the first WebRTC offer."""
     if not created:
         return
 
     def after_commit():
-        call = CallSession.objects.select_related("caller", "caller__profile", "conversation").get(pk=instance.pk)
+        call = CallSession.objects.select_related("conversation").get(pk=instance.pk)
         recipient_ids = list(
             call.conversation.participants.exclude(pk=call.caller_id).values_list("pk", flat=True)
         )
@@ -134,15 +135,5 @@ def broadcast_incoming_call(sender, instance, created, **kwargs):
                 for recipient_id in recipient_ids
             ]
         )
-        payload = {
-            "call_id": call.pk,
-            "conversation_id": call.conversation_id,
-            "kind": call.kind,
-            "actor": _actor_payload(call.caller),
-            "created_at": call.started_at.isoformat(),
-            "url": "/mensagens/",
-        }
-        for recipient_id in recipient_ids:
-            publish_user_event(recipient_id, "incoming_call", payload)
 
     transaction.on_commit(after_commit)
