@@ -56,10 +56,12 @@ class UserEventsConsumer(AsyncJsonWebsocketConsumer):
         if not call_context:
             return
 
-        # Re-announce a ringing call immediately before caller-originated signaling.
-        # This makes a receiver that reconnected after the original event establish
-        # the correct call_id before an offer/candidate reaches the browser.
-        if call_context["sender_is_caller"]:
+        description = signal.get("description") if isinstance(signal.get("description"), dict) else {}
+        is_initial_offer = description.get("type") == "offer"
+
+        # Ring exactly when a real WebRTC offer exists. Sending this event immediately
+        # before the offer also guarantees the receiver binds the correct call_id first.
+        if call_context["sender_is_caller"] and is_initial_offer:
             incoming_payload = {
                 "call_id": call_context["call_id"],
                 "conversation_id": conversation_id,
