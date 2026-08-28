@@ -1,11 +1,13 @@
 package com.labyrt.pulso
 
 import android.Manifest
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Bundle
 import android.provider.Settings
+import android.util.Base64
 import android.webkit.CookieManager
 import android.webkit.JavascriptInterface
 import android.webkit.PermissionRequest
@@ -22,11 +24,14 @@ import androidx.glance.appwidget.GlanceAppWidgetManager
 import androidx.glance.appwidget.updateAll
 import com.labyrt.pulso.widget.PulsoWidget
 import com.labyrt.pulso.widget.PulsoWidgetReceiver
+import com.labyrt.pulso.widget.WidgetSummaryClient
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
+import java.security.MessageDigest
+import java.security.SecureRandom
 
 class MainActivity : ComponentActivity() {
     private lateinit var webView: WebView
@@ -99,7 +104,7 @@ class MainActivity : ComponentActivity() {
             allowContentAccess = false
             javaScriptCanOpenWindowsAutomatically = false
             mediaPlaybackRequiresUserGesture = false
-            userAgentString = "$userAgentString PULSO-Android/0.1"
+            userAgentString = "$userAgentString PULSO-Android/0.2"
         }
 
         CookieManager.getInstance().apply {
@@ -194,8 +199,32 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun openIntent(intent: Intent) {
+        val callback = intent.data
+        if (callback?.scheme == "pulso" && callback.host == "auth") {
+            consumeNativeAuthCallback(callback)
+            return
+        }
         val path = intent.getStringExtra(EXTRA_PATH)?.takeIf { it.startsWith("/") } ?: "/app/"
         webView.loadUrl(BuildConfig.PULSO_BASE_URL + path)
+    }
+
+    private fun consumeNativeAuthCallback(uri: Uri) {
+        val code = uri.getQueryParameter("code")?.takeIf { NATIVE_CODE.matches(it) }
+        val prefs = getSharedPreferences(NATIVE_AUTH_PREFS, Context.MODE_PRIVATE)
+        val verifier = prefs.getString(NATIVE_AUTH_VERIFIER, null)?.takeIf { NATIVE_VERIFIER.matches(it) }
+        if (code == null || verifier == null) {
+            Toast.makeText(this, "Não foi possível concluir o login social.", Toast.LENGTH_LONG).show()
+            webView.loadUrl("${BuildConfig.PULSO_BASE_URL}/entrar/")
+            return
+        }
+
+        prefs.edit().remove(NATIVE_AUTH_VERIFIER).apply()
+        val target = Uri.parse("${BuildConfig.PULSO_BASE_URL}/native-auth/consume/")
+            .buildUpon()
+            .appendQueryParameter("code", code)
+            .appendQueryParameter("verifier", verifier)
+            .build()
+        webView.loadUrl(target.toString())
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
@@ -235,9 +264,52 @@ class MainActivity : ComponentActivity() {
         }
 
         @JavascriptInterface
+        fun updateWidgetSummary(rawJson: String) {
+            if (!WidgetSummaryClient.save(this@MainActivity, rawJson)) return
+            appScope.launch(Dispatchers.IO) {
+                runCatching { PulsoWidget().updateAll(this@MainActivity) }
+            }
+        }
+
+        @JavascriptInterface
+        fun clearWidgetSummary() {
+            WidgetSummaryClient.clear(this@MainActivity)
+            appScope.launch(Dispatchers.IO) {
+                runCatching { PulsoWidget().updateAll(this@MainActivity) }
+            }
+        }
+
+        @JavascriptInterface
         fun refreshWidget() {
             appScope.launch(Dispatchers.IO) {
                 runCatching { PulsoWidget().updateAll(this@MainActivity) }
+            }
+        }
+
+        @JavascriptInterface
+        fun startSocialLogin(provider: String) {
+            if (provider !in NATIVE_SOCIAL_PROVIDERS) return
+            val verifierBytes = ByteArray(32).also { SecureRandom().nextBytes(it) }
+            val verifier = base64Url(verifierBytes)
+            val challenge = base64Url(MessageDigest.getInstance("SHA-256").digest(verifier.toByteArray(Charsets.US_ASCII)))
+            getSharedPreferences(NATIVE_AUTH_PREFS, Context.MODE_PRIVATE)
+                .edit()
+                .putString(NATIVE_AUTH_VERIFIER, verifier)
+                .apply()
+
+            val target = Uri.parse("${BuildConfig.PULSO_BASE_URL}/native-auth/start/$provider/")
+                .buildUpon()
+                .appendQueryParameter("challenge", challenge)
+                .build()
+            appScope.launch {
+                runCatching { startActivity(Intent(Intent.ACTION_VIEW, target)) }
+                    .onFailure {
+                        Toast.makeText(
+                            this@MainActivity,
+                            "Não encontrei um navegador para concluir o login social.",
+                            Toast.LENGTH_LONG,
+                        ).show()
+                    }
             }
         }
 
@@ -249,7 +321,17 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private fun base64Url(bytes: ByteArray): String = Base64.encodeToString(
+        bytes,
+        Base64.URL_SAFE or Base64.NO_WRAP or Base64.NO_PADDING,
+    )
+
     companion object {
         const val EXTRA_PATH = "pulso_path"
+        private const val NATIVE_AUTH_PREFS = "pulso_native_auth"
+        private const val NATIVE_AUTH_VERIFIER = "verifier"
+        private val NATIVE_SOCIAL_PROVIDERS = setOf("google", "github", "linkedin", "instagram", "adobe")
+        private val NATIVE_CODE = Regex("^[A-Za-z0-9_-]{32,128}$")
+        private val NATIVE_VERIFIER = Regex("^[A-Za-z0-9_-]{43,128}$")
     }
 }
