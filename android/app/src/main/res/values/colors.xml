@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="pulso_ink">#0B0B0C</color>
+    <color name="pulso_paper">#F7F6F2</color>
+    <color name="pulso_lime">#CAFF37</color>
+    <color name="pulso_blue">#5375FF</color>
+</resources>
