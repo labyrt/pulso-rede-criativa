@@ -15,7 +15,6 @@ internal enum class WidgetConnectionState {
 
 internal data class WidgetSummary(
     val state: WidgetConnectionState,
-    val displayName: String = "PULSO",
     val messagesUnread: Int = 0,
     val activityUnread: Int = 0,
     val callsUnread: Int = 0,
@@ -57,7 +56,6 @@ internal object WidgetSummaryClient {
         val latest = json.optJSONObject("latest_activity")
         return WidgetSummary(
             state = WidgetConnectionState.READY,
-            displayName = json.optString("display_name").ifBlank { "PULSO" },
             messagesUnread = json.optInt("messages_unread", 0).coerceAtLeast(0),
             activityUnread = json.optInt("activity_unread", 0).coerceAtLeast(0),
             callsUnread = json.optInt("calls_unread", 0).coerceAtLeast(0),
