@@ -41,6 +41,7 @@ kotlin {
 }
 
 dependencies {
+    implementation("androidx.activity:activity-ktx:1.13.0")
     implementation("androidx.glance:glance-appwidget:1.2.0")
     implementation("androidx.webkit:webkit:1.17.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
