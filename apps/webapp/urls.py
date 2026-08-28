@@ -1,8 +1,10 @@
 from django.urls import path
 
-from .views import app_shell, auth_page, landing, security_page
+from .views import app_shell, auth_page, landing, pwa_manifest, security_page, service_worker
 
 urlpatterns = [
+    path("manifest.webmanifest", pwa_manifest, name="pwa-manifest"),
+    path("service-worker.js", service_worker, name="service-worker"),
     path("", landing, name="landing"),
     path("entrar/", auth_page, {"mode": "login"}, name="login-page"),
     path("criar-conta/", auth_page, {"mode": "register"}, name="register-page"),

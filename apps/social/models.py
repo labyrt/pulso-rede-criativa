@@ -80,7 +80,9 @@ class Notification(models.Model):
         LIKE = "like", "Curtida"
         COMMENT = "comment", "Comentário"
         REPOST = "repost", "Compartilhamento"
+        POST = "post", "Nova publicação"
         MESSAGE = "message", "Mensagem"
+        CALL = "call", "Ligação"
 
     recipient = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="notifications")
     actor = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="actions")

@@ -1,7 +1,10 @@
+from pathlib import Path
+
 from django.conf import settings
 from django.contrib.auth.decorators import login_required
-from django.urls import reverse
+from django.http import HttpResponse, JsonResponse
 from django.shortcuts import redirect, render
+from django.urls import reverse
 from django.views.decorators.csrf import ensure_csrf_cookie
 
 
@@ -68,3 +71,59 @@ def app_shell(request, section="feed", username=""):
 
 def security_page(request):
     return render(request, "webapp/security.html")
+
+
+def pwa_manifest(_request):
+    response = JsonResponse(
+        {
+            "id": "/",
+            "name": "PULSO — Rede Criativa",
+            "short_name": "PULSO",
+            "description": "Rede para criar, conectar e movimentar a economia criativa.",
+            "lang": "pt-BR",
+            "start_url": "/",
+            "scope": "/",
+            "display": "standalone",
+            "orientation": "any",
+            "background_color": "#f7f6f2",
+            "theme_color": "#0b0b0c",
+            "categories": ["social", "lifestyle"],
+            "icons": [
+                {
+                    "src": "/static/webapp/icons/pulso-192.png",
+                    "sizes": "192x192",
+                    "type": "image/png",
+                    "purpose": "any",
+                },
+                {
+                    "src": "/static/webapp/icons/pulso-512.png",
+                    "sizes": "512x512",
+                    "type": "image/png",
+                    "purpose": "any",
+                },
+                {
+                    "src": "/static/webapp/icons/pulso-maskable-512.png",
+                    "sizes": "512x512",
+                    "type": "image/png",
+                    "purpose": "maskable",
+                },
+            ],
+            "shortcuts": [
+                {"name": "Feed", "short_name": "Feed", "url": "/app/"},
+                {"name": "Explorar", "short_name": "Explorar", "url": "/explorar/"},
+                {"name": "Mensagens", "short_name": "Mensagens", "url": "/mensagens/"},
+            ],
+        },
+        json_dumps_params={"ensure_ascii": False},
+    )
+    response["Content-Type"] = "application/manifest+json"
+    response["Cache-Control"] = "public, max-age=3600"
+    return response
+
+
+def service_worker(_request):
+    source = Path(settings.BASE_DIR, "static", "webapp", "service-worker.js").read_text(encoding="utf-8")
+    response = HttpResponse(source, content_type="application/javascript; charset=utf-8")
+    response["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    response["Service-Worker-Allowed"] = "/"
+    return response
