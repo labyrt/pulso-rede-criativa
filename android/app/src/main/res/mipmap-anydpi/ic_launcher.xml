@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="@color/pulso_ink" />
+        </shape>
+    </item>
+    <item android:drawable="@drawable/ic_pulso_foreground" />
+</layer-list>

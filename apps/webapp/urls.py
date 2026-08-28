@@ -1,10 +1,12 @@
 from django.urls import path
 
 from .views import app_shell, auth_page, landing, pwa_manifest, security_page, service_worker
+from .widget_views import WidgetSummaryView
 
 urlpatterns = [
     path("manifest.webmanifest", pwa_manifest, name="pwa-manifest"),
     path("service-worker.js", service_worker, name="service-worker"),
+    path("api/v1/widget/summary/", WidgetSummaryView.as_view(), name="widget-summary"),
     path("", landing, name="landing"),
     path("entrar/", auth_page, {"mode": "login"}, name="login-page"),
     path("criar-conta/", auth_page, {"mode": "register"}, name="register-page"),

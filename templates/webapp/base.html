@@ -26,6 +26,7 @@
     <link rel="stylesheet" href="{% static 'webapp/privacy-controls.css' %}">
     <link rel="stylesheet" href="{% static 'webapp/pwa-realtime.css' %}">
     <link rel="stylesheet" href="{% static 'webapp/mobile-chat-hotfix.css' %}">
+    <link rel="stylesheet" href="{% static 'webapp/brand-intro.css' %}">
     {% block head %}{% endblock %}
 </head>
 <body data-section="{% block section %}{% endblock %}" data-profile="{% block profile %}{% endblock %}">
@@ -42,5 +43,7 @@
     <script src="{% static 'webapp/realtime.js' %}" defer></script>
     <script src="{% static 'webapp/activity-enhancements.js' %}" defer></script>
     <script src="{% static 'webapp/mobile-chat-hotfix.js' %}" defer></script>
+    <script src="{% static 'webapp/native-bridge.js' %}" defer></script>
+    <script src="{% static 'webapp/brand-intro.js' %}" defer></script>
 </body>
 </html>
