@@ -1,7 +1,6 @@
 package com.labyrt.pulso
 
 import android.Manifest
-import android.app.Activity
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
@@ -16,6 +15,9 @@ import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.Toast
+import androidx.activity.ComponentActivity
+import androidx.activity.addCallback
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.glance.appwidget.GlanceAppWidgetManager
 import androidx.glance.appwidget.updateAll
 import com.labyrt.pulso.widget.PulsoWidget
@@ -26,11 +28,37 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 
-class MainActivity : Activity() {
+class MainActivity : ComponentActivity() {
     private lateinit var webView: WebView
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var fileChooserCallback: ValueCallback<Array<Uri>>? = null
     private var pendingMediaRequest: PermissionRequest? = null
+
+    private val fileChooserLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult(),
+    ) { result ->
+        val uris = WebChromeClient.FileChooserParams.parseResult(result.resultCode, result.data)
+        fileChooserCallback?.onReceiveValue(uris)
+        fileChooserCallback = null
+    }
+
+    private val mediaPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions(),
+    ) { grants ->
+        val request = pendingMediaRequest ?: return@registerForActivityResult
+        pendingMediaRequest = null
+        val requiredPermissions = androidPermissionsFor(request)
+        if (requiredPermissions.all { grants[it] == true || checkSelfPermission(it) == PackageManager.PERMISSION_GRANTED }) {
+            request.grant(request.resources)
+        } else {
+            request.deny()
+            Toast.makeText(
+                this,
+                "Câmera e microfone precisam de permissão para chamadas.",
+                Toast.LENGTH_LONG,
+            ).show()
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -38,11 +66,23 @@ class MainActivity : Activity() {
         webView = WebView(this)
         setContentView(webView)
         configureWebView()
+        configureBackNavigation()
 
         if (savedInstanceState == null) {
             openIntent(intent)
         } else {
             webView.restoreState(savedInstanceState)
+        }
+    }
+
+    private fun configureBackNavigation() {
+        onBackPressedDispatcher.addCallback(this) {
+            if (webView.canGoBack()) {
+                webView.goBack()
+            } else {
+                isEnabled = false
+                onBackPressedDispatcher.onBackPressed()
+            }
         }
     }
 
@@ -94,7 +134,7 @@ class MainActivity : Activity() {
                         addCategory(Intent.CATEGORY_OPENABLE)
                     }
                 return try {
-                    startActivityForResult(chooserIntent, REQUEST_FILE_CHOOSER)
+                    fileChooserLauncher.launch(chooserIntent)
                     true
                 } catch (_: Exception) {
                     fileChooserCallback?.onReceiveValue(null)
@@ -104,22 +144,14 @@ class MainActivity : Activity() {
             }
 
             override fun onPermissionRequest(request: PermissionRequest) {
-                val needsCamera = request.resources.contains(PermissionRequest.RESOURCE_VIDEO_CAPTURE)
-                val needsMic = request.resources.contains(PermissionRequest.RESOURCE_AUDIO_CAPTURE)
-                val missing = buildList {
-                    if (needsCamera && checkSelfPermission(Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
-                        add(Manifest.permission.CAMERA)
-                    }
-                    if (needsMic && checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
-                        add(Manifest.permission.RECORD_AUDIO)
-                    }
-                }
+                val missing = androidPermissionsFor(request)
+                    .filter { checkSelfPermission(it) != PackageManager.PERMISSION_GRANTED }
                 if (missing.isEmpty()) {
                     request.grant(request.resources)
                 } else {
                     pendingMediaRequest?.deny()
                     pendingMediaRequest = request
-                    requestPermissions(missing.toTypedArray(), REQUEST_MEDIA_PERMISSION)
+                    mediaPermissionLauncher.launch(missing.toTypedArray())
                 }
             }
 
@@ -127,6 +159,11 @@ class MainActivity : Activity() {
                 if (pendingMediaRequest == request) pendingMediaRequest = null
             }
         }
+    }
+
+    private fun androidPermissionsFor(request: PermissionRequest): List<String> = buildList {
+        if (request.resources.contains(PermissionRequest.RESOURCE_VIDEO_CAPTURE)) add(Manifest.permission.CAMERA)
+        if (request.resources.contains(PermissionRequest.RESOURCE_AUDIO_CAPTURE)) add(Manifest.permission.RECORD_AUDIO)
     }
 
     private fun isPulsoUri(uri: Uri): Boolean {
@@ -148,38 +185,6 @@ class MainActivity : Activity() {
     override fun onSaveInstanceState(outState: Bundle) {
         webView.saveState(outState)
         super.onSaveInstanceState(outState)
-    }
-
-    @Deprecated("Deprecated in Java")
-    override fun onBackPressed() {
-        if (webView.canGoBack()) webView.goBack() else super.onBackPressed()
-    }
-
-    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        if (requestCode == REQUEST_FILE_CHOOSER) {
-            val result = WebChromeClient.FileChooserParams.parseResult(resultCode, data)
-            fileChooserCallback?.onReceiveValue(result)
-            fileChooserCallback = null
-            return
-        }
-        super.onActivityResult(requestCode, resultCode, data)
-    }
-
-    override fun onRequestPermissionsResult(
-        requestCode: Int,
-        permissions: Array<out String>,
-        grantResults: IntArray,
-    ) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (requestCode != REQUEST_MEDIA_PERMISSION) return
-        val request = pendingMediaRequest ?: return
-        pendingMediaRequest = null
-        if (grantResults.isNotEmpty() && grantResults.all { it == PackageManager.PERMISSION_GRANTED }) {
-            request.grant(request.resources)
-        } else {
-            request.deny()
-            Toast.makeText(this, "Câmera e microfone precisam de permissão para chamadas.", Toast.LENGTH_LONG).show()
-        }
     }
 
     override fun onDestroy() {
@@ -230,7 +235,5 @@ class MainActivity : Activity() {
 
     companion object {
         const val EXTRA_PATH = "pulso_path"
-        private const val REQUEST_FILE_CHOOSER = 4101
-        private const val REQUEST_MEDIA_PERMISSION = 4102
     }
 }
