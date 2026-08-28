@@ -12,8 +12,8 @@ from django.http import HttpResponseRedirect
 from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.views.decorators.cache import never_cache
-from django.views.decorators.csrf import ensure_csrf_cookie
-from django.views.decorators.http import require_GET
+from django.views.decorators.csrf import csrf_exempt, ensure_csrf_cookie
+from django.views.decorators.http import require_GET, require_POST
 
 
 User = get_user_model()
@@ -34,6 +34,12 @@ PROVIDERS = {
 
 class PulsoNativeRedirect(HttpResponseRedirect):
     allowed_schemes = ["pulso"]
+
+
+def _no_store(response):
+    response["Cache-Control"] = "no-store, private"
+    response["Pragma"] = "no-cache"
+    return response
 
 
 def _b64url(raw: bytes) -> str:
@@ -61,7 +67,7 @@ def native_auth_start(request, provider):
     challenge = request.GET.get("challenge", "").strip()
     provider_url, provider_label = _provider_login_url(provider)
     if not provider_url or not CHALLENGE_RE.fullmatch(challenge):
-        return redirect("login-page")
+        return _no_store(redirect("login-page"))
 
     handoff = secrets.token_urlsafe(24)
     cache.set(
@@ -79,8 +85,7 @@ def native_auth_start(request, provider):
             "next_url": next_url,
         },
     )
-    response["Cache-Control"] = "no-store, private"
-    return response
+    return _no_store(response)
 
 
 @require_GET
@@ -90,12 +95,12 @@ def native_auth_complete(request):
     pending_key = f"pulso:native-auth:pending:{handoff}"
     pending = cache.get(pending_key) if handoff else None
     if not request.user.is_authenticated or not isinstance(pending, dict):
-        return redirect("login-page")
+        return _no_store(redirect("login-page"))
 
     challenge = pending.get("challenge", "")
     if not CHALLENGE_RE.fullmatch(str(challenge)):
         cache.delete(pending_key)
-        return redirect("login-page")
+        return _no_store(redirect("login-page"))
 
     code = secrets.token_urlsafe(32)
     cache.set(
@@ -104,32 +109,33 @@ def native_auth_complete(request):
         timeout=CODE_TTL,
     )
     cache.delete(pending_key)
-    return PulsoNativeRedirect(f"pulso://auth/callback?{urlencode({'code': code})}")
+    return _no_store(PulsoNativeRedirect(f"pulso://auth/callback?{urlencode({'code': code})}"))
 
 
-@require_GET
+@csrf_exempt
+@require_POST
 @never_cache
 def native_auth_consume(request):
-    code = request.GET.get("code", "").strip()
-    verifier = request.GET.get("verifier", "").strip()
+    code = request.POST.get("code", "").strip()
+    verifier = request.POST.get("verifier", "").strip()
     if not CODE_RE.fullmatch(code) or not VERIFIER_RE.fullmatch(verifier):
-        return redirect("login-page")
+        return _no_store(redirect("login-page"))
 
     code_key = f"pulso:native-auth:code:{code}"
     payload = cache.get(code_key)
     if not isinstance(payload, dict):
-        return redirect("login-page")
+        return _no_store(redirect("login-page"))
 
     expected = str(payload.get("challenge", ""))
     actual = _challenge_for(verifier)
     if not hmac.compare_digest(expected, actual):
-        return redirect("login-page")
+        return _no_store(redirect("login-page"))
 
     user = User.objects.filter(pk=payload.get("user_id"), is_active=True).first()
     if not user:
         cache.delete(code_key)
-        return redirect("login-page")
+        return _no_store(redirect("login-page"))
 
     cache.delete(code_key)
     login(request, user, backend="django.contrib.auth.backends.ModelBackend")
-    return redirect("app")
+    return _no_store(redirect("app"))
