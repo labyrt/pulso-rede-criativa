@@ -13,7 +13,11 @@ User = get_user_model()
 @override_settings(
     SOCIALACCOUNT_PROVIDERS={
         "github": {"APPS": [{"client_id": "test-client", "secret": "test-secret"}]},
-    }
+    },
+    STORAGES={
+        "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+        "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
+    },
 )
 class NativeAuthTests(TestCase):
     def setUp(self):
