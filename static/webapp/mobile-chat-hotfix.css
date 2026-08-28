@@ -1,0 +1,193 @@
+:root {
+  --pulso-mobile-nav-height: 66px;
+  --pulso-mobile-header-height: 62px;
+  --pulso-visual-height: 100dvh;
+}
+
+.pulso-icon {
+  width: 1em;
+  height: 1em;
+  display: block;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.9;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  pointer-events: none;
+}
+
+.nav-icon--svg {
+  display: inline-grid !important;
+  place-items: center;
+  line-height: 1;
+}
+
+.side-nav [data-nav="messages"] .nav-icon--svg .pulso-icon {
+  width: 23px;
+  height: 23px;
+}
+
+.call-actions button[data-call] {
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  color: var(--ink);
+  border: 1px solid var(--line);
+  background: var(--white, #fff);
+  transition: transform .16s ease, background .16s ease, border-color .16s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.call-actions button[data-call] .pulso-icon {
+  width: 20px;
+  height: 20px;
+}
+
+.call-actions button[data-call]:hover,
+.call-actions button[data-call]:focus-visible {
+  background: #efeee9;
+  border-color: var(--ink);
+  outline: none;
+}
+
+.call-actions button[data-call]:active {
+  transform: scale(.94);
+}
+
+html[data-theme="dark"] .call-actions button[data-call] {
+  color: #f3f1eb;
+  background: #1a1b1e;
+  border-color: #45464b;
+}
+
+html[data-theme="dark"] .call-actions button[data-call]:hover,
+html[data-theme="dark"] .call-actions button[data-call]:focus-visible {
+  background: #292a2e;
+  border-color: #77797f;
+}
+
+@media (max-width: 920px) {
+  .mobile-nav {
+    box-sizing: border-box;
+    height: calc(var(--pulso-mobile-nav-height) + env(safe-area-inset-bottom));
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  .mobile-nav a,
+  .mobile-nav button {
+    min-width: 46px;
+    min-height: 46px;
+    display: grid;
+    place-items: center;
+    color: var(--ink);
+    border-radius: 16px;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .mobile-nav a .pulso-icon {
+    width: 25px;
+    height: 25px;
+  }
+
+  .mobile-nav a.active {
+    background: #efeee9;
+  }
+
+  html[data-theme="dark"] .mobile-nav a,
+  html[data-theme="dark"] .mobile-nav button {
+    color: #f3f1eb;
+  }
+
+  html[data-theme="dark"] .mobile-nav a.active {
+    background: #292a2e;
+  }
+
+  body[data-section="messages"] .content-column {
+    height: var(--pulso-visual-height, 100dvh);
+    min-height: 0;
+    padding-bottom: calc(var(--pulso-mobile-nav-height) + env(safe-area-inset-bottom));
+    overflow: hidden;
+  }
+
+  body[data-section="messages"] .page-content {
+    height: calc(var(--pulso-visual-height, 100dvh) - var(--pulso-mobile-header-height) - var(--pulso-mobile-nav-height) - env(safe-area-inset-bottom));
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  body[data-section="messages"] .messages-layout {
+    height: 100%;
+    min-height: 0;
+  }
+
+  body[data-section="messages"] .conversation-list,
+  body[data-section="messages"] .chat-panel {
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  body[data-section="messages"] #conversation-items {
+    height: calc(100% - 112px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  body[data-section="messages"] .chat-panel.open-mobile {
+    display: flex;
+    min-height: 0;
+  }
+
+  body[data-section="messages"] .chat-header {
+    flex: 0 0 76px;
+  }
+
+  body[data-section="messages"] .message-stream {
+    min-height: 0;
+    flex: 1 1 auto;
+    padding-bottom: 18px;
+  }
+
+  body[data-section="messages"] .typing-indicator {
+    flex: 0 0 auto;
+  }
+
+  body[data-section="messages"] .chat-form {
+    position: relative;
+    bottom: auto;
+    flex: 0 0 auto;
+    z-index: 5;
+    padding: 12px 14px max(12px, env(safe-area-inset-bottom));
+    box-shadow: 0 -8px 24px rgba(11, 11, 12, .06);
+  }
+
+  body[data-section="messages"] .chat-form input {
+    min-width: 0;
+  }
+}
+
+@media (max-width: 640px) {
+  .chat-header {
+    padding-inline: 12px;
+  }
+
+  .chat-header .call-actions {
+    gap: 8px;
+  }
+
+  .call-actions button[data-call] {
+    width: 42px;
+    height: 42px;
+  }
+
+  .message-stream {
+    padding: 18px 14px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .call-actions button[data-call] {
+    transition: none;
+  }
+}
