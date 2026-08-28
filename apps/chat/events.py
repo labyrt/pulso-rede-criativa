@@ -8,7 +8,7 @@ from django.db.models import Q
 from apps.accounts.models import Block
 from apps.common.realtime import user_group_name
 
-from .models import Conversation
+from .models import CallSession, Conversation
 
 
 class UserEventsConsumer(AsyncJsonWebsocketConsumer):
@@ -47,8 +47,12 @@ class UserEventsConsumer(AsyncJsonWebsocketConsumer):
         signal = content.get("signal")
         if not isinstance(signal, dict) or len(str(signal)) > 50000:
             return
+        try:
+            call_id = int(signal.get("call_id"))
+        except (TypeError, ValueError):
+            return
 
-        recipient_ids = await self._call_recipients(conversation_id, self.scope["user"].pk)
+        recipient_ids = await self._call_recipients(conversation_id, call_id, self.scope["user"].pk)
         if not recipient_ids:
             return
         payload = {
@@ -66,10 +70,20 @@ class UserEventsConsumer(AsyncJsonWebsocketConsumer):
         await self.send_json({"type": event["event_type"], **event.get("payload", {})})
 
     @database_sync_to_async
-    def _call_recipients(self, conversation_id, user_id):
-        conversation = Conversation.objects.filter(pk=conversation_id, participants__pk=user_id).first()
-        if not conversation:
+    def _call_recipients(self, conversation_id, call_id, user_id):
+        call = (
+            CallSession.objects.filter(
+                pk=call_id,
+                conversation_id=conversation_id,
+                conversation__participants__pk=user_id,
+                status__in=[CallSession.Status.RINGING, CallSession.Status.ACTIVE],
+            )
+            .select_related("conversation")
+            .first()
+        )
+        if not call:
             return []
+        conversation = Conversation.objects.get(pk=conversation_id)
         recipient_ids = list(conversation.participants.exclude(pk=user_id).values_list("pk", flat=True))
         if not recipient_ids:
             return []
