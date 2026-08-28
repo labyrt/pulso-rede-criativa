@@ -3,10 +3,17 @@
 <html lang="pt-BR">
 <head>
     <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <meta name="theme-color" content="#0b0b0c">
     <meta name="description" content="PULSO é a rede para criar, conectar e movimentar a economia criativa.">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-title" content="PULSO">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <title>{% block title %}PULSO — rede criativa{% endblock %}</title>
+    <link rel="manifest" href="/manifest.webmanifest">
+    <link rel="icon" type="image/png" sizes="192x192" href="{% static 'webapp/icons/pulso-192.png' %}">
+    <link rel="apple-touch-icon" sizes="180x180" href="{% static 'webapp/icons/apple-touch-icon-180.png' %}">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
@@ -17,6 +24,7 @@
     <link rel="stylesheet" href="{% static 'webapp/mobile-accessibility.css' %}">
     <link rel="stylesheet" href="{% static 'webapp/product-polish.css' %}">
     <link rel="stylesheet" href="{% static 'webapp/privacy-controls.css' %}">
+    <link rel="stylesheet" href="{% static 'webapp/pwa-realtime.css' %}">
     {% block head %}{% endblock %}
 </head>
 <body data-section="{% block section %}{% endblock %}" data-profile="{% block profile %}{% endblock %}">
@@ -29,5 +37,7 @@
     <script src="{% static 'webapp/profile-chat-enhancements.js' %}" defer></script>
     <script src="{% static 'webapp/product-polish.js' %}" defer></script>
     <script src="{% static 'webapp/privacy-controls.js' %}" defer></script>
+    <script src="{% static 'webapp/pwa.js' %}" defer></script>
+    <script src="{% static 'webapp/realtime.js' %}" defer></script>
 </body>
 </html>
