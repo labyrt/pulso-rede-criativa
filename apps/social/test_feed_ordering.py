@@ -35,3 +35,14 @@ class FeedOrderingTests(TestCase):
         ids = [item["id"] for item in response.data["results"]]
         self.assertGreaterEqual(len(ids), 2)
         self.assertEqual(ids[:2], [newer.pk, older.pk])
+
+    def test_explore_returns_newest_post_first_even_when_older_has_more_engagement(self):
+        older = Post.objects.create(author=self.creator, body="publicação antiga popular")
+        newer = Post.objects.create(author=self.creator, body="publicação nova")
+
+        response = self.client.get("/api/v1/social/explore/")
+
+        self.assertEqual(response.status_code, 200)
+        ids = [item["id"] for item in response.data["results"]]
+        self.assertGreaterEqual(len(ids), 2)
+        self.assertEqual(ids[:2], [newer.pk, older.pk])
