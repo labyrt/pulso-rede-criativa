@@ -1,5 +1,6 @@
 from django.urls import path
 
+from .native_auth_views import native_auth_complete, native_auth_consume, native_auth_start
 from .views import app_shell, auth_page, landing, pwa_manifest, security_page, service_worker
 from .widget_views import WidgetSummaryView
 
@@ -7,6 +8,9 @@ urlpatterns = [
     path("manifest.webmanifest", pwa_manifest, name="pwa-manifest"),
     path("service-worker.js", service_worker, name="service-worker"),
     path("api/v1/widget/summary/", WidgetSummaryView.as_view(), name="widget-summary"),
+    path("native-auth/start/<str:provider>/", native_auth_start, name="native-auth-start"),
+    path("native-auth/complete/", native_auth_complete, name="native-auth-complete"),
+    path("native-auth/consume/", native_auth_consume, name="native-auth-consume"),
     path("", landing, name="landing"),
     path("entrar/", auth_page, {"mode": "login"}, name="login-page"),
     path("criar-conta/", auth_page, {"mode": "register"}, name="register-page"),
