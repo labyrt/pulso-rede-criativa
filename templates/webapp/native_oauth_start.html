@@ -1,0 +1,21 @@
+{% extends "webapp/base.html" %}
+{% load static %}
+{% block title %}Conectando {{ provider_label }} — PULSO{% endblock %}
+{% block section %}auth{% endblock %}
+{% block content %}
+<main class="oauth-page">
+    <section class="oauth-card">
+        <a class="brand brand--dark" href="/">PULSO</a>
+        <span class="eyebrow">Login social</span>
+        <h1>Abrindo {{ provider_label }}.</h1>
+        <p>Você vai concluir o acesso no navegador e voltar automaticamente para o aplicativo.</p>
+        <form id="native-oauth-form" method="post" action="{{ provider_url }}">
+            {% csrf_token %}
+            <input type="hidden" name="process" value="login">
+            <input type="hidden" name="next" value="{{ next_url }}">
+            <button class="button button--ink" type="submit">Continuar com {{ provider_label }}</button>
+        </form>
+    </section>
+</main>
+<script src="{% static 'webapp/native-oauth-start.js' %}" defer></script>
+{% endblock %}

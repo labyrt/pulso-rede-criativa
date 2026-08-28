@@ -1,11 +1,7 @@
 package com.labyrt.pulso.widget
 
 import android.content.Context
-import android.webkit.CookieManager
-import com.labyrt.pulso.BuildConfig
 import org.json.JSONObject
-import java.net.HttpURLConnection
-import java.net.URL
 
 internal enum class WidgetConnectionState {
     READY,
@@ -22,44 +18,70 @@ internal data class WidgetSummary(
 )
 
 internal object WidgetSummaryClient {
-    fun load(@Suppress("UNUSED_PARAMETER") context: Context): WidgetSummary {
-        val cookie = CookieManager.getInstance().getCookie(BuildConfig.PULSO_BASE_URL)
-        if (cookie.isNullOrBlank()) return WidgetSummary(WidgetConnectionState.SIGNED_OUT)
+    private const val PREFS = "pulso_widget_summary"
+    private const val KEY_READY = "ready"
+    private const val KEY_MESSAGES = "messages_unread"
+    private const val KEY_ACTIVITY = "activity_unread"
+    private const val KEY_CALLS = "calls_unread"
+    private const val KEY_LATEST_LABEL = "latest_activity_label"
+    private const val KEY_UPDATED_AT = "updated_at"
+    private const val MAX_COUNT = 9_999
+    private const val STALE_AFTER_MS = 6 * 60 * 60 * 1000L
 
-        val connection = (URL("${BuildConfig.PULSO_BASE_URL}/api/v1/widget/summary/").openConnection() as HttpURLConnection)
-        return try {
-            connection.requestMethod = "GET"
-            connection.connectTimeout = 5_000
-            connection.readTimeout = 6_000
-            connection.instanceFollowRedirects = false
-            connection.setRequestProperty("Accept", "application/json")
-            connection.setRequestProperty("Cookie", cookie)
-            connection.setRequestProperty("User-Agent", "PULSO-Android-Widget/0.1")
+    private val allowedLabels = setOf(
+        "Nova conexão",
+        "Nova curtida",
+        "Novo comentário",
+        "Novo compartilhamento",
+        "Nova publicação",
+        "Nova mensagem",
+        "Nova ligação",
+        "Nova atividade",
+    )
 
-            when (connection.responseCode) {
-                HttpURLConnection.HTTP_OK -> parse(connection.inputStream.bufferedReader().use { it.readText() })
-                HttpURLConnection.HTTP_UNAUTHORIZED,
-                HttpURLConnection.HTTP_FORBIDDEN,
-                HttpURLConnection.HTTP_MOVED_TEMP,
-                HttpURLConnection.HTTP_MOVED_PERM -> WidgetSummary(WidgetConnectionState.SIGNED_OUT)
-                else -> WidgetSummary(WidgetConnectionState.UNAVAILABLE)
-            }
-        } catch (_: Exception) {
-            WidgetSummary(WidgetConnectionState.UNAVAILABLE)
-        } finally {
-            connection.disconnect()
+    fun load(context: Context): WidgetSummary {
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        if (!prefs.getBoolean(KEY_READY, false)) {
+            return WidgetSummary(WidgetConnectionState.SIGNED_OUT)
         }
-    }
 
-    private fun parse(raw: String): WidgetSummary {
-        val json = JSONObject(raw)
-        val latest = json.optJSONObject("latest_activity")
+        val updatedAt = prefs.getLong(KEY_UPDATED_AT, 0L)
+        val stale = updatedAt <= 0L || System.currentTimeMillis() - updatedAt > STALE_AFTER_MS
+        val storedLabel = prefs.getString(KEY_LATEST_LABEL, null)
+        val label = if (stale) "Abra o PULSO para atualizar" else storedLabel
+
         return WidgetSummary(
             state = WidgetConnectionState.READY,
-            messagesUnread = json.optInt("messages_unread", 0).coerceAtLeast(0),
-            activityUnread = json.optInt("activity_unread", 0).coerceAtLeast(0),
-            callsUnread = json.optInt("calls_unread", 0).coerceAtLeast(0),
-            latestActivityLabel = latest?.optString("label")?.takeIf { it.isNotBlank() },
+            messagesUnread = prefs.getInt(KEY_MESSAGES, 0).coerceIn(0, MAX_COUNT),
+            activityUnread = prefs.getInt(KEY_ACTIVITY, 0).coerceIn(0, MAX_COUNT),
+            callsUnread = prefs.getInt(KEY_CALLS, 0).coerceIn(0, MAX_COUNT),
+            latestActivityLabel = label,
         )
+    }
+
+    fun save(context: Context, raw: String): Boolean = runCatching {
+        val json = JSONObject(raw)
+        val latest = json.optJSONObject("latest_activity")
+        val label = latest
+            ?.optString("label")
+            ?.takeIf { it in allowedLabels }
+
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean(KEY_READY, true)
+            .putInt(KEY_MESSAGES, json.optInt("messages_unread", 0).coerceIn(0, MAX_COUNT))
+            .putInt(KEY_ACTIVITY, json.optInt("activity_unread", 0).coerceIn(0, MAX_COUNT))
+            .putInt(KEY_CALLS, json.optInt("calls_unread", 0).coerceIn(0, MAX_COUNT))
+            .putString(KEY_LATEST_LABEL, label)
+            .putLong(KEY_UPDATED_AT, System.currentTimeMillis())
+            .apply()
+        true
+    }.getOrDefault(false)
+
+    fun clear(context: Context) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .edit()
+            .clear()
+            .apply()
     }
 }
