@@ -60,7 +60,6 @@ class WidgetSummaryTests(TestCase):
         response = self.client.get("/api/v1/widget/summary/")
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.data["display_name"], "Pessoa PULSO")
         self.assertEqual(response.data["messages_unread"], 1)
         self.assertEqual(response.data["activity_unread"], 2)
         self.assertEqual(response.data["calls_unread"], 1)
@@ -71,6 +70,9 @@ class WidgetSummaryTests(TestCase):
         self.assertNotIn("segredo", serialized)
         self.assertNotIn("sender-widget@test.dev", serialized)
         self.assertNotIn("widget_sender", serialized)
+        self.assertNotIn("widget_viewer", serialized)
+        self.assertNotIn("pessoa pulso", serialized)
+        self.assertNotIn("display_name", response.data)
         self.assertNotIn("pix", serialized)
 
     def test_widget_links_are_internal_deep_links(self):
