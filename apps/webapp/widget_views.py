@@ -22,7 +22,7 @@ class WidgetSummaryView(APIView):
     """Small, private payload for the Android home-screen widget.
 
     The endpoint intentionally never returns message bodies, post excerpts,
-    Pix data, email addresses, or names of other users. The widget may be
+    Pix data, email addresses, usernames, or display names. The widget may be
     visible while the phone is unlocked, so its default state is privacy-first.
     """
 
@@ -45,9 +45,7 @@ class WidgetSummaryView(APIView):
         latest = unread_notifications.order_by("-created_at", "-id").first()
         missed_calls = unread_notifications.filter(kind=Notification.Kind.CALL).count()
 
-        display_name = getattr(getattr(user, "profile", None), "display_name", "") or user.username
         payload = {
-            "display_name": display_name,
             "messages_unread": unread_messages,
             "activity_unread": unread_notifications.count(),
             "calls_unread": missed_calls,
