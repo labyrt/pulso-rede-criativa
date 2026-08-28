@@ -10,6 +10,7 @@
     android:targetCellHeight="2"
     android:updatePeriodMillis="3600000"
     android:description="@string/widget_description"
+    android:previewLayout="@layout/pulso_widget_preview"
     android:initialLayout="@layout/glance_default_loading_layout"
     android:resizeMode="horizontal|vertical"
     android:widgetCategory="home_screen" />
