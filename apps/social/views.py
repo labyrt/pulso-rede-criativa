@@ -190,9 +190,7 @@ class FeedView(APIView):
 
 class ExploreView(APIView):
     def get(self, request):
-        posts = visible_posts_for(request.user).annotate(
-            engagement=F("pulso_likes_count") + F("pulso_comments_count") * 2
-        ).order_by("-engagement", "-created_at")
+        posts = visible_posts_for(request.user).order_by("-created_at", "-id")
         category = request.query_params.get("category")
         if category:
             posts = posts.filter(category=category)
