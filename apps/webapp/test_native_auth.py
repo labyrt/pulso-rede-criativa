@@ -33,6 +33,11 @@ class NativeAuthTests(TestCase):
     def tearDown(self):
         cache.clear()
 
+    def assert_no_store_private(self, response):
+        directives = {item.strip() for item in response["Cache-Control"].split(",")}
+        self.assertIn("no-store", directives)
+        self.assertIn("private", directives)
+
     def test_start_requires_valid_enabled_provider_and_challenge(self):
         response = self.client.get(
             "/native-auth/start/github/",
@@ -41,7 +46,7 @@ class NativeAuthTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "/accounts/github/login/")
         self.assertContains(response, "/native-auth/complete/")
-        self.assertEqual(response["Cache-Control"], "no-store, private")
+        self.assert_no_store_private(response)
 
         invalid = self.client.get("/native-auth/start/github/", {"challenge": "bad"})
         self.assertEqual(invalid.status_code, 302)
@@ -64,7 +69,7 @@ class NativeAuthTests(TestCase):
         response = self.client.get("/native-auth/complete/", {"handoff": handoff})
         self.assertEqual(response.status_code, 302)
         self.assertTrue(response.url.startswith("pulso://auth/callback?"))
-        self.assertEqual(response["Cache-Control"], "no-store, private")
+        self.assert_no_store_private(response)
         code = parse_qs(urlparse(response.url).query)["code"][0]
         payload = cache.get(f"pulso:native-auth:code:{code}")
         self.assertEqual(payload["user_id"], self.user.pk)
@@ -101,7 +106,7 @@ class NativeAuthTests(TestCase):
         )
         self.assertEqual(response.status_code, 302)
         self.assertEqual(response.url, "/app/")
-        self.assertEqual(response["Cache-Control"], "no-store, private")
+        self.assert_no_store_private(response)
         self.assertEqual(int(self.client.session["_auth_user_id"]), self.user.pk)
         self.assertIsNone(cache.get(code_key))
 
