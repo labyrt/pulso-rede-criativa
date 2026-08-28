@@ -47,9 +47,14 @@ class MainActivity : ComponentActivity() {
     ) { grants ->
         val request = pendingMediaRequest ?: return@registerForActivityResult
         pendingMediaRequest = null
-        val requiredPermissions = androidPermissionsFor(request)
+        val approvedResources = approvedWebResources(request)
+        if (approvedResources.isEmpty()) {
+            request.deny()
+            return@registerForActivityResult
+        }
+        val requiredPermissions = androidPermissionsFor(approvedResources)
         if (requiredPermissions.all { grants[it] == true || checkSelfPermission(it) == PackageManager.PERMISSION_GRANTED }) {
-            request.grant(request.resources)
+            request.grant(approvedResources)
         } else {
             request.deny()
             Toast.makeText(
@@ -144,10 +149,15 @@ class MainActivity : ComponentActivity() {
             }
 
             override fun onPermissionRequest(request: PermissionRequest) {
-                val missing = androidPermissionsFor(request)
+                val approvedResources = approvedWebResources(request)
+                if (approvedResources.isEmpty()) {
+                    request.deny()
+                    return
+                }
+                val missing = androidPermissionsFor(approvedResources)
                     .filter { checkSelfPermission(it) != PackageManager.PERMISSION_GRANTED }
                 if (missing.isEmpty()) {
-                    request.grant(request.resources)
+                    request.grant(approvedResources)
                 } else {
                     pendingMediaRequest?.deny()
                     pendingMediaRequest = request
@@ -161,9 +171,15 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun androidPermissionsFor(request: PermissionRequest): List<String> = buildList {
-        if (request.resources.contains(PermissionRequest.RESOURCE_VIDEO_CAPTURE)) add(Manifest.permission.CAMERA)
-        if (request.resources.contains(PermissionRequest.RESOURCE_AUDIO_CAPTURE)) add(Manifest.permission.RECORD_AUDIO)
+    private fun approvedWebResources(request: PermissionRequest): Array<String> =
+        request.resources.filter {
+            it == PermissionRequest.RESOURCE_VIDEO_CAPTURE ||
+                it == PermissionRequest.RESOURCE_AUDIO_CAPTURE
+        }.toTypedArray()
+
+    private fun androidPermissionsFor(resources: Array<String>): List<String> = buildList {
+        if (resources.contains(PermissionRequest.RESOURCE_VIDEO_CAPTURE)) add(Manifest.permission.CAMERA)
+        if (resources.contains(PermissionRequest.RESOURCE_AUDIO_CAPTURE)) add(Manifest.permission.RECORD_AUDIO)
     }
 
     private fun isPulsoUri(uri: Uri): Boolean {
