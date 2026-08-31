@@ -1,16 +1,85 @@
 """Safe normalization for identities created by trusted OAuth providers."""
 
+import logging
+
+from django.conf import settings
 from django.contrib.auth import get_user_model
 
 from allauth.socialaccount.adapter import DefaultSocialAccountAdapter
 
 
 User = get_user_model()
+logger = logging.getLogger("pulso.oauth")
 TRUSTED_VERIFIED_EMAIL_LINK_PROVIDERS = {"github", "google"}
+KNOWN_PROVIDER_ERRORS = {
+    "access_denied",
+    "application_suspended",
+    "bad_verification_code",
+    "incorrect_client_credentials",
+    "redirect_uri_mismatch",
+    "unverified_user_email",
+}
+
+
+def classify_oauth_error(request, exception=None):
+    """Return a non-secret failure category suitable for production logs."""
+    provider_error = str(request.GET.get("error") or "").strip().lower()
+    if provider_error in KNOWN_PROVIDER_ERRORS:
+        return provider_error
+
+    text = str(exception or "").lower()
+    for reason in KNOWN_PROVIDER_ERRORS:
+        if reason in text:
+            return reason
+
+    if exception is not None:
+        if "error retrieving access token" in text:
+            return "token_exchange_failed"
+        if "401" in text or "unauthorized" in text:
+            return "provider_unauthorized"
+        return exception.__class__.__name__.lower()
+
+    has_state = bool(request.GET.get("state"))
+    has_code = bool(request.GET.get("code"))
+    if has_state and has_code:
+        return "state_not_found"
+    if has_code and not has_state:
+        return "missing_state_parameter"
+    if has_state and not has_code:
+        return "missing_code_parameter"
+    return "unknown"
 
 
 class PulsoSocialAccountAdapter(DefaultSocialAccountAdapter):
     """Keep social login branded and safely reuse an existing local account."""
+
+    def on_authentication_error(
+        self,
+        request,
+        provider,
+        error=None,
+        exception=None,
+        extra_context=None,
+    ):
+        provider_id = getattr(provider, "id", "unknown")
+        session_cookie_present = bool(request.COOKIES.get(settings.SESSION_COOKIE_NAME))
+        logger.warning(
+            "PULSO_OAUTH_ERROR provider=%s reason=%s auth_error=%s has_state=%d has_code=%d session_cookie=%d exception=%s",
+            provider_id,
+            classify_oauth_error(request, exception),
+            str(error or "unknown"),
+            int(bool(request.GET.get("state"))),
+            int(bool(request.GET.get("code"))),
+            int(session_cookie_present),
+            exception.__class__.__name__ if exception is not None else "none",
+        )
+        return super().on_authentication_error(
+            request,
+            provider,
+            error=error,
+            exception=exception,
+            extra_context=extra_context,
+        )
 
     def pre_social_login(self, request, sociallogin):
         """Connect trusted providers only when they prove a verified e-mail.
