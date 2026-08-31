@@ -18,6 +18,46 @@ _ACTIVITY_LABELS = {
 }
 
 
+def build_widget_summary(user):
+    """Return the privacy-safe payload shared by the API and Android shell."""
+    unread_messages = (
+        Message.objects.filter(
+            conversation__participants=user,
+            read_at__isnull=True,
+        )
+        .exclude(sender=user)
+        .count()
+    )
+    unread_notifications = Notification.objects.filter(
+        recipient=user,
+        is_read=False,
+    )
+    latest = unread_notifications.order_by("-created_at", "-id").first()
+    missed_calls = unread_notifications.filter(kind=Notification.Kind.CALL).count()
+
+    return {
+        "messages_unread": unread_messages,
+        "activity_unread": unread_notifications.count(),
+        "calls_unread": missed_calls,
+        "latest_activity": (
+            {
+                "kind": latest.kind,
+                "label": _ACTIVITY_LABELS.get(latest.kind, "Nova atividade"),
+                "created_at": latest.created_at,
+            }
+            if latest
+            else None
+        ),
+        "links": {
+            "home": "/app/",
+            "messages": "/mensagens/",
+            "activity": "/notificacoes/",
+            "compose": "/app/?composer=1",
+        },
+        "generated_at": timezone.now(),
+    }
+
+
 class WidgetSummaryView(APIView):
     """Small, private payload for the Android home-screen widget.
 
@@ -29,44 +69,7 @@ class WidgetSummaryView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        user = request.user
-        unread_messages = (
-            Message.objects.filter(
-                conversation__participants=user,
-                read_at__isnull=True,
-            )
-            .exclude(sender=user)
-            .count()
-        )
-        unread_notifications = Notification.objects.filter(
-            recipient=user,
-            is_read=False,
-        )
-        latest = unread_notifications.order_by("-created_at", "-id").first()
-        missed_calls = unread_notifications.filter(kind=Notification.Kind.CALL).count()
-
-        payload = {
-            "messages_unread": unread_messages,
-            "activity_unread": unread_notifications.count(),
-            "calls_unread": missed_calls,
-            "latest_activity": (
-                {
-                    "kind": latest.kind,
-                    "label": _ACTIVITY_LABELS.get(latest.kind, "Nova atividade"),
-                    "created_at": latest.created_at,
-                }
-                if latest
-                else None
-            ),
-            "links": {
-                "home": "/app/",
-                "messages": "/mensagens/",
-                "activity": "/notificacoes/",
-                "compose": "/app/?composer=1",
-            },
-            "generated_at": timezone.now(),
-        }
-        response = Response(payload)
+        response = Response(build_widget_summary(request.user))
         response["Cache-Control"] = "no-store, private"
         response["Pragma"] = "no-cache"
         return response

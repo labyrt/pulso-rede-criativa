@@ -1,5 +1,8 @@
+import json
+import re
+
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from rest_framework.test import APIClient
 
 from apps.chat.models import Conversation, Message
@@ -7,6 +10,10 @@ from apps.social.models import Notification
 
 
 User = get_user_model()
+TEST_STORAGES = {
+    "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+    "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
+}
 
 
 class WidgetSummaryTests(TestCase):
@@ -89,3 +96,36 @@ class WidgetSummaryTests(TestCase):
                 "compose": "/app/?composer=1",
             },
         )
+
+    @override_settings(STORAGES=TEST_STORAGES)
+    def test_authenticated_shell_embeds_privacy_safe_widget_snapshot(self):
+        self.create_message(sender=self.sender, body="conteúdo privado da conversa")
+        Notification.objects.create(
+            recipient=self.viewer,
+            actor=self.sender,
+            kind=Notification.Kind.MESSAGE,
+        )
+
+        self.client.force_login(self.viewer)
+        response = self.client.get("/app/")
+
+        self.assertEqual(response.status_code, 200)
+        source = response.content.decode("utf-8")
+        match = re.search(
+            r'<script id="pulso-widget-summary" type="application/json">(.*?)</script>',
+            source,
+            flags=re.DOTALL,
+        )
+        self.assertIsNotNone(match)
+        payload = json.loads(match.group(1))
+        self.assertEqual(payload["messages_unread"], 1)
+        self.assertEqual(payload["activity_unread"], 1)
+
+        serialized = json.dumps(payload, ensure_ascii=False).lower()
+        self.assertNotIn("conteúdo privado", serialized)
+        self.assertNotIn("viewer-widget@test.dev", serialized)
+        self.assertNotIn("sender-widget@test.dev", serialized)
+        self.assertNotIn("widget_viewer", serialized)
+        self.assertNotIn("widget_sender", serialized)
+        self.assertNotIn("pessoa pulso", serialized)
+        self.assertNotIn("pix", serialized)

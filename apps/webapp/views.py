@@ -7,6 +7,8 @@ from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.views.decorators.csrf import ensure_csrf_cookie
 
+from apps.webapp.widget_views import build_widget_summary
+
 
 @ensure_csrf_cookie
 def landing(request):
@@ -65,7 +67,11 @@ def app_shell(request, section="feed", username=""):
     return render(
         request,
         "webapp/app.html",
-        {"section": section, "profile_username": username},
+        {
+            "section": section,
+            "profile_username": username,
+            "widget_summary": build_widget_summary(request.user),
+        },
     )
 
 
