@@ -20,6 +20,9 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.addCallback
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.glance.appwidget.GlanceAppWidgetManager
 import androidx.glance.appwidget.updateAll
 import com.labyrt.pulso.widget.PulsoWidget
@@ -73,8 +76,13 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        // Android 15/16 render target-SDK 35+ apps edge-to-edge. Handle the
+        // insets explicitly so the WebView never disappears under the status
+        // or navigation bars on gesture and three-button navigation devices.
+        WindowCompat.setDecorFitsSystemWindows(window, false)
         webView = WebView(this)
         setContentView(webView)
+        configureSystemInsets()
         configureWebView()
         configureBackNavigation()
 
@@ -83,6 +91,17 @@ class MainActivity : ComponentActivity() {
         } else {
             webView.restoreState(savedInstanceState)
         }
+    }
+
+    private fun configureSystemInsets() {
+        ViewCompat.setOnApplyWindowInsetsListener(webView) { view, insets ->
+            val bars = insets.getInsets(
+                WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout(),
+            )
+            view.setPadding(bars.left, bars.top, bars.right, bars.bottom)
+            insets
+        }
+        ViewCompat.requestApplyInsets(webView)
     }
 
     private fun configureBackNavigation() {
@@ -104,7 +123,7 @@ class MainActivity : ComponentActivity() {
             allowContentAccess = false
             javaScriptCanOpenWindowsAutomatically = false
             mediaPlaybackRequiresUserGesture = false
-            userAgentString = "$userAgentString PULSO-Android/0.2"
+            userAgentString = "$userAgentString PULSO-Android/0.2.1"
         }
 
         CookieManager.getInstance().apply {
