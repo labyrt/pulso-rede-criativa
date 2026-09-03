@@ -14,6 +14,18 @@
       }
     };
 
+    const showNativeAuthError = () => {
+      const message = "Este APK precisa ser atualizado para concluir o login social com segurança.";
+      const box = document.getElementById("form-error");
+      if (box) {
+        box.textContent = message;
+        box.setAttribute("role", "alert");
+        box.scrollIntoView({ block: "nearest", behavior: "smooth" });
+      } else {
+        window.alert(message);
+      }
+    };
+
     const widgetButtons = [...document.querySelectorAll("[data-native-widget]")];
     widgetButtons.forEach(button => {
       button.hidden = false;
@@ -63,7 +75,13 @@
         const provider = form.dataset.nativeSocialProvider;
         if (!provider) return;
         event.preventDefault();
-        if (!callAndroid("startSocialLogin", provider)) form.submit();
+        event.stopPropagation();
+
+        // A social-login POST made directly from an older WebView can carry a
+        // stale CSRF token. Never fall back to that unsafe path inside the APK:
+        // current Android builds hand OAuth to the system browser and return
+        // through the protected challenge/verifier flow instead.
+        if (!callAndroid("startSocialLogin", provider)) showNativeAuthError();
       });
     });
 
