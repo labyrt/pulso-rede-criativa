@@ -14,8 +14,8 @@ android {
         applicationId = "com.labyrt.pulso"
         minSdk = 26
         targetSdk = 36
-        versionCode = 2
-        versionName = "0.2.0"
+        versionCode = 3
+        versionName = "0.2.1"
         buildConfigField("String", "PULSO_BASE_URL", "\"https://pulso-rede-criativa.onrender.com\"")
     }
 
@@ -42,6 +42,7 @@ kotlin {
 
 dependencies {
     implementation("androidx.activity:activity-ktx:1.13.0")
+    implementation("androidx.core:core-ktx:1.17.0")
     implementation("androidx.glance:glance-appwidget:1.2.0")
     implementation("androidx.webkit:webkit:1.17.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
