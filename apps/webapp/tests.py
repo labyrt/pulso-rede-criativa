@@ -8,15 +8,11 @@ from django.test import TestCase, override_settings
     }
 )
 class AuthenticationPageTests(TestCase):
-    def test_social_login_options_are_visible_but_inactive_without_secrets(self):
+    def test_unconfigured_social_login_options_are_not_rendered(self):
         response = self.client.get("/entrar/")
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Google")
-        self.assertContains(response, "GitHub")
-        self.assertContains(response, "LinkedIn")
-        self.assertContains(response, "Instagram")
-        self.assertContains(response, "Adobe / Behance")
-        self.assertContains(response, "disabled", count=5)
+        self.assertNotContains(response, "ou continue com")
+        self.assertNotContains(response, "social-login-button")
 
     @override_settings(
         SOCIALACCOUNT_PROVIDERS={

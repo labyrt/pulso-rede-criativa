@@ -1,7 +1,5 @@
-from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
 from django.test import TestCase, override_settings
@@ -45,9 +43,14 @@ class NativeAuthTests(TestCase):
             "/native-auth/start/github/",
             {"challenge": self.challenge},
         )
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "/accounts/github/login/")
-        self.assertContains(response, "/native-auth/complete/")
+        self.assertEqual(response.status_code, 302)
+        destination = urlparse(response.url)
+        self.assertEqual(destination.netloc, "github.com")
+        self.assertEqual(destination.path, "/login/oauth/authorize")
+        query = parse_qs(destination.query)
+        self.assertEqual(query["client_id"], ["test-client"])
+        self.assertIn("state", query)
+        self.assertNotIn("/accounts/github/login/", response.url)
         self.assert_no_store_private(response)
         self.assertIn("Cookie", response.get("Vary", ""))
 
@@ -70,6 +73,9 @@ class NativeAuthTests(TestCase):
         self.assertIn("no-store", response["Cache-Control"])
         self.assertIn('data-native-social-provider="github"', html)
         self.assertNotIn('action="/accounts/github/login/"', html)
+        self.assertNotIn("Google", html)
+        self.assertNotIn("LinkedIn", html)
+        self.assertNotIn("Instagram", html)
 
     def test_regular_browser_keeps_csrf_protected_social_post(self):
         response = self.client.get("/entrar/", HTTP_USER_AGENT="Mozilla/5.0 Chrome/140")
@@ -77,19 +83,6 @@ class NativeAuthTests(TestCase):
 
         self.assertContains(response, 'action="/accounts/github/login/"')
         self.assertIn('name="csrfmiddlewaretoken"', html)
-
-    def test_native_oauth_script_waits_for_cookie_and_user_action(self):
-        source = Path(
-            settings.BASE_DIR,
-            "static",
-            "webapp",
-            "native-oauth-start.js",
-        ).read_text(encoding="utf-8")
-
-        self.assertIn('row.startsWith("csrftoken=")', source)
-        self.assertIn("button.disabled = true", source)
-        self.assertIn("Recarregar acesso seguro", source)
-        self.assertNotIn("requestSubmit", source)
 
     def test_complete_issues_short_lived_code_only_for_authenticated_browser(self):
         handoff = "handoff-test"

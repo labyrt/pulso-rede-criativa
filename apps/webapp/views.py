@@ -60,13 +60,14 @@ def auth_page(request, mode):
             "url": reverse("openid_connect_login", kwargs={"provider_id": "adobe"}),
         },
     ]
+    enabled_providers = [provider for provider in providers if provider["enabled"]]
     is_native_android = "PULSO-Android/" in request.headers.get("User-Agent", "")
     return render(
         request,
         "webapp/auth.html",
         {
             "mode": mode,
-            "social_providers": providers,
+            "social_providers": enabled_providers,
             "is_native_android": is_native_android,
         },
     )

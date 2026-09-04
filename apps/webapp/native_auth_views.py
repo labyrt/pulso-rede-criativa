@@ -8,13 +8,17 @@ from urllib.parse import urlencode
 from django.conf import settings
 from django.contrib.auth import get_user_model, login
 from django.core.cache import cache
+from django.core.exceptions import ImproperlyConfigured
 from django.http import HttpResponseRedirect
-from django.shortcuts import redirect, render
+from django.shortcuts import redirect
 from django.urls import reverse
 from django.utils.cache import patch_vary_headers
 from django.views.decorators.cache import never_cache
-from django.views.decorators.csrf import csrf_exempt, ensure_csrf_cookie
+from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST
+
+from allauth.socialaccount.adapter import get_adapter
+from allauth.socialaccount.models import SocialApp
 
 
 User = get_user_model()
@@ -25,11 +29,11 @@ PENDING_TTL = 10 * 60
 CODE_TTL = 90
 
 PROVIDERS = {
-    "google": ("google", "Google", "google_login", None),
-    "github": ("github", "GitHub", "github_login", None),
-    "linkedin": ("linkedin_oauth2", "LinkedIn", "linkedin_oauth2_login", None),
-    "instagram": ("instagram", "Instagram", "instagram_login", None),
-    "adobe": ("openid_connect", "Adobe / Behance", "openid_connect_login", {"provider_id": "adobe"}),
+    "google": ("google", "google"),
+    "github": ("github", "github"),
+    "linkedin": ("linkedin_oauth2", "linkedin_oauth2"),
+    "instagram": ("instagram", "instagram"),
+    "adobe": ("openid_connect", "adobe"),
 }
 
 
@@ -52,23 +56,32 @@ def _challenge_for(verifier: str) -> str:
     return _b64url(hashlib.sha256(verifier.encode("ascii")).digest())
 
 
-def _provider_login_url(provider: str):
+def _native_provider(request, provider: str):
     config = PROVIDERS.get(provider)
     if not config:
-        return None, None
-    settings_key, label, route, kwargs = config
+        return None
+    settings_key, provider_id = config
     if settings_key not in settings.SOCIALACCOUNT_PROVIDERS:
-        return None, label
-    return reverse(route, kwargs=kwargs), label
+        return None
+    try:
+        return get_adapter(request).get_provider(request, provider_id)
+    except (ImproperlyConfigured, SocialApp.DoesNotExist):
+        return None
 
 
 @require_GET
 @never_cache
-@ensure_csrf_cookie
 def native_auth_start(request, provider):
+    """Start native OAuth without the browser-login confirmation POST.
+
+    The Android app supplies a PKCE-style challenge before this route can
+    create a handoff.  Calling the provider directly avoids mixing CSRF
+    cookies across the APK custom tab and the regular browser session while
+    keeping all normal web login routes POST-only and CSRF protected.
+    """
     challenge = request.GET.get("challenge", "").strip()
-    provider_url, provider_label = _provider_login_url(provider)
-    if not provider_url or not CHALLENGE_RE.fullmatch(challenge):
+    social_provider = _native_provider(request, provider)
+    if social_provider is None or not CHALLENGE_RE.fullmatch(challenge):
         return _no_store(redirect("login-page"))
 
     handoff = secrets.token_urlsafe(24)
@@ -78,15 +91,7 @@ def native_auth_start(request, provider):
         timeout=PENDING_TTL,
     )
     next_url = f"{reverse('native-auth-complete')}?{urlencode({'handoff': handoff})}"
-    response = render(
-        request,
-        "webapp/native_oauth_start.html",
-        {
-            "provider_url": provider_url,
-            "provider_label": provider_label,
-            "next_url": next_url,
-        },
-    )
+    response = social_provider.redirect(request, process="login", next_url=next_url)
     return _no_store(response)
 
 
