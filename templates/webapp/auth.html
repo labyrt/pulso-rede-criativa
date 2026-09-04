@@ -30,10 +30,10 @@
                 <p class="auth-switch">Já faz parte? <a href="/entrar/">Entre aqui</a></p>
             {% endif %}
             <p class="form-error" id="form-error" role="alert"></p>
-            <div class="auth-divider"><span>ou continue com</span></div>
-            <div class="social-login-grid" aria-label="Acesso com uma conta externa">
-                {% for provider in social_providers %}
-                    {% if provider.enabled %}
+            {% if social_providers %}
+                <div class="auth-divider"><span>ou continue com</span></div>
+                <div class="social-login-grid" aria-label="Acesso com uma conta externa">
+                    {% for provider in social_providers %}
                         {% if is_native_android %}
                             <button class="social-login-button" type="button" data-native-social-provider="{{ provider.id }}"><i>{{ provider.mark }}</i><span>{{ provider.label }}</span></button>
                         {% else %}
@@ -43,12 +43,9 @@
                                 <button class="social-login-button" type="submit"><i>{{ provider.mark }}</i><span>{{ provider.label }}</span></button>
                             </form>
                         {% endif %}
-                    {% else %}
-                        <button class="social-login-button" type="button" disabled title="Integração aguardando as credenciais do provedor"><i>{{ provider.mark }}</i><span>{{ provider.label }}</span></button>
-                    {% endif %}
-                {% endfor %}
-            </div>
-            <p class="social-login-note">As opções são ativadas somente quando as credenciais oficiais do provedor estiverem protegidas no ambiente de produção.</p>
+                    {% endfor %}
+                </div>
+            {% endif %}
         </div>
     </section>
 </main>
