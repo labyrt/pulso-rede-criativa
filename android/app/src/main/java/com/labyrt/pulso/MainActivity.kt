@@ -85,8 +85,9 @@ class MainActivity : ComponentActivity() {
         configureSystemInsets()
         configureWebView()
         configureBackNavigation()
+        val contentWasUpgraded = refreshWebContentForUpgrade()
 
-        if (savedInstanceState == null) {
+        if (savedInstanceState == null || contentWasUpgraded) {
             openIntent(intent)
         } else {
             webView.restoreState(savedInstanceState)
@@ -123,7 +124,7 @@ class MainActivity : ComponentActivity() {
             allowContentAccess = false
             javaScriptCanOpenWindowsAutomatically = false
             mediaPlaybackRequiresUserGesture = false
-            userAgentString = "$userAgentString PULSO-Android/0.2.2"
+            userAgentString = "$userAgentString PULSO-Android/0.2.3"
         }
 
         CookieManager.getInstance().apply {
@@ -134,7 +135,17 @@ class MainActivity : ComponentActivity() {
         webView.addJavascriptInterface(NativeBridge(), "PulsoAndroid")
         webView.webViewClient = object : WebViewClient() {
             override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
-                val uri = request?.url ?: return false
+                val navigation = request ?: return false
+                val uri = navigation.url
+                val legacyProvider = if (navigation.isForMainFrame) {
+                    socialProviderForLegacyNavigation(uri)
+                } else {
+                    null
+                }
+                if (legacyProvider != null) {
+                    startNativeSocialLogin(legacyProvider)
+                    return true
+                }
                 if (isPulsoUri(uri)) return false
                 startActivity(Intent(Intent.ACTION_VIEW, uri))
                 return true
@@ -209,6 +220,55 @@ class MainActivity : ComponentActivity() {
     private fun isPulsoUri(uri: Uri): Boolean {
         val base = Uri.parse(BuildConfig.PULSO_BASE_URL)
         return uri.scheme == "https" && uri.host == base.host
+    }
+
+    private fun socialProviderForLegacyNavigation(uri: Uri): String? {
+        if (isPulsoUri(uri)) {
+            val match = LEGACY_SOCIAL_LOGIN_PATH.matchEntire(uri.path.orEmpty()) ?: return null
+            return PROVIDER_ROUTE_NAMES[match.groupValues[1]]
+        }
+        return when {
+            uri.host.equals("github.com", ignoreCase = true) &&
+                uri.path == "/login/oauth/authorize" -> "github"
+            else -> null
+        }
+    }
+
+    private fun refreshWebContentForUpgrade(): Boolean {
+        val prefs = getSharedPreferences(WEB_CONTENT_PREFS, Context.MODE_PRIVATE)
+        if (prefs.getInt(WEB_CONTENT_VERSION, -1) == BuildConfig.VERSION_CODE) return false
+        webView.clearCache(true)
+        webView.clearHistory()
+        prefs.edit().putInt(WEB_CONTENT_VERSION, BuildConfig.VERSION_CODE).apply()
+        return true
+    }
+
+    private fun startNativeSocialLogin(provider: String) {
+        if (provider !in NATIVE_SOCIAL_PROVIDERS) return
+        val verifierBytes = ByteArray(32).also { SecureRandom().nextBytes(it) }
+        val verifier = base64Url(verifierBytes)
+        val challenge = base64Url(
+            MessageDigest.getInstance("SHA-256").digest(verifier.toByteArray(Charsets.US_ASCII)),
+        )
+        getSharedPreferences(NATIVE_AUTH_PREFS, Context.MODE_PRIVATE)
+            .edit()
+            .putString(NATIVE_AUTH_VERIFIER, verifier)
+            .apply()
+
+        val target = Uri.parse("${BuildConfig.PULSO_BASE_URL}/native-auth/start/$provider/")
+            .buildUpon()
+            .appendQueryParameter("challenge", challenge)
+            .build()
+        appScope.launch {
+            runCatching { startActivity(Intent(Intent.ACTION_VIEW, target)) }
+                .onFailure {
+                    Toast.makeText(
+                        this@MainActivity,
+                        "Não encontrei um navegador para concluir o login social.",
+                        Toast.LENGTH_LONG,
+                    ).show()
+                }
+        }
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -303,29 +363,7 @@ class MainActivity : ComponentActivity() {
 
         @JavascriptInterface
         fun startSocialLogin(provider: String) {
-            if (provider !in NATIVE_SOCIAL_PROVIDERS) return
-            val verifierBytes = ByteArray(32).also { SecureRandom().nextBytes(it) }
-            val verifier = base64Url(verifierBytes)
-            val challenge = base64Url(MessageDigest.getInstance("SHA-256").digest(verifier.toByteArray(Charsets.US_ASCII)))
-            getSharedPreferences(NATIVE_AUTH_PREFS, Context.MODE_PRIVATE)
-                .edit()
-                .putString(NATIVE_AUTH_VERIFIER, verifier)
-                .apply()
-
-            val target = Uri.parse("${BuildConfig.PULSO_BASE_URL}/native-auth/start/$provider/")
-                .buildUpon()
-                .appendQueryParameter("challenge", challenge)
-                .build()
-            appScope.launch {
-                runCatching { startActivity(Intent(Intent.ACTION_VIEW, target)) }
-                    .onFailure {
-                        Toast.makeText(
-                            this@MainActivity,
-                            "Não encontrei um navegador para concluir o login social.",
-                            Toast.LENGTH_LONG,
-                        ).show()
-                    }
-            }
+            startNativeSocialLogin(provider)
         }
 
         @JavascriptInterface
@@ -345,7 +383,17 @@ class MainActivity : ComponentActivity() {
         const val EXTRA_PATH = "pulso_path"
         private const val NATIVE_AUTH_PREFS = "pulso_native_auth"
         private const val NATIVE_AUTH_VERIFIER = "verifier"
+        private const val WEB_CONTENT_PREFS = "pulso_web_content"
+        private const val WEB_CONTENT_VERSION = "version_code"
         private val NATIVE_SOCIAL_PROVIDERS = setOf("google", "github", "linkedin", "instagram", "adobe")
+        private val LEGACY_SOCIAL_LOGIN_PATH = Regex("^/accounts/(google|github|linkedin_oauth2|instagram|openid_connect)/login/?$")
+        private val PROVIDER_ROUTE_NAMES = mapOf(
+            "google" to "google",
+            "github" to "github",
+            "linkedin_oauth2" to "linkedin",
+            "instagram" to "instagram",
+            "openid_connect" to "adobe",
+        )
         private val NATIVE_CODE = Regex("^[A-Za-z0-9_-]{32,128}$")
         private val NATIVE_VERIFIER = Regex("^[A-Za-z0-9_-]{43,128}$")
     }

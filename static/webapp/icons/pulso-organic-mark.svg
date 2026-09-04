@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="PULSO">
+  <rect width="512" height="512" fill="#0B0B0C"/>
+  <path d="M128 270 C152 208 180 327 209 260 C232 208 228 137 261 137 C299 137 284 374 322 355 C351 341 351 246 389 270" fill="none" stroke="#CAFF37" stroke-width="85" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M128 270 C152 208 180 327 209 260 C232 208 228 137 261 137 C299 137 284 374 322 355 C351 341 351 246 389 270" fill="none" stroke="#FF6B76" stroke-width="24" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

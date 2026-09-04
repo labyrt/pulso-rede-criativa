@@ -65,7 +65,7 @@ class NativeAuthTests(TestCase):
     def test_android_login_never_posts_social_auth_directly_from_webview(self):
         response = self.client.get(
             "/entrar/",
-            HTTP_USER_AGENT="Mozilla/5.0 PULSO-Android/0.2.2",
+            HTTP_USER_AGENT="Mozilla/5.0 PULSO-Android/0.2.3",
         )
         html = response.content.decode("utf-8")
 
