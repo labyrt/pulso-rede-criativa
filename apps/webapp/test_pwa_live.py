@@ -47,6 +47,7 @@ class PwaDeliveryTests(TestCase):
         self.assertEqual(response["Service-Worker-Allowed"], "/")
         self.assertIn("no-cache", response["Cache-Control"])
         source = response.content.decode("utf-8")
+        self.assertIn('const VERSION = "pulso-shell-v2"', source)
         self.assertIn('url.pathname.startsWith("/api/")', source)
         self.assertIn('request.mode === "navigate"', source)
         self.assertIn("OFFLINE_URL", source)

@@ -231,10 +231,12 @@ html[data-theme="dark"] .notification-item time {
     }
 
     body[data-section="auth"] .auth-panel {
-        padding: 28px 22px 34px;
+        padding: 28px 22px max(96px, calc(34px + env(safe-area-inset-bottom)));
         align-items: flex-start;
+        overflow-x: hidden;
     }
     body[data-section="auth"] .auth-box {
+        min-width: 0;
         margin-block: 0;
         padding-top: 18px;
     }
@@ -253,6 +255,10 @@ html[data-theme="dark"] .notification-item time {
     body[data-section="auth"] .stack-form input {
         min-height: 56px;
         font-size: 16px;
+    }
+    body[data-section="auth"] .social-login-grid,
+    body[data-section="auth"] .social-login-button {
+        min-width: 0;
     }
 
     .page-header {

@@ -123,7 +123,7 @@ class MainActivity : ComponentActivity() {
             allowContentAccess = false
             javaScriptCanOpenWindowsAutomatically = false
             mediaPlaybackRequiresUserGesture = false
-            userAgentString = "$userAgentString PULSO-Android/0.2.1"
+            userAgentString = "$userAgentString PULSO-Android/0.2.2"
         }
 
         CookieManager.getInstance().apply {

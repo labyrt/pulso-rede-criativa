@@ -70,9 +70,10 @@
       }
     };
 
-    document.querySelectorAll("form[data-native-social-provider]").forEach(form => {
-      form.addEventListener("submit", event => {
-        const provider = form.dataset.nativeSocialProvider;
+    document.querySelectorAll("[data-native-social-provider]").forEach(control => {
+      const eventName = control.matches("form") ? "submit" : "click";
+      control.addEventListener(eventName, event => {
+        const provider = control.dataset.nativeSocialProvider;
         if (!provider) return;
         event.preventDefault();
         event.stopPropagation();

@@ -14,8 +14,8 @@ android {
         applicationId = "com.labyrt.pulso"
         minSdk = 26
         targetSdk = 36
-        versionCode = 3
-        versionName = "0.2.1"
+        versionCode = 4
+        versionName = "0.2.2"
         buildConfigField("String", "PULSO_BASE_URL", "\"https://pulso-rede-criativa.onrender.com\"")
     }
 

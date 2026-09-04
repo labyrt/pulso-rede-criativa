@@ -34,11 +34,15 @@
             <div class="social-login-grid" aria-label="Acesso com uma conta externa">
                 {% for provider in social_providers %}
                     {% if provider.enabled %}
-                        <form class="social-login-form" method="post" action="{{ provider.url }}" data-native-social-provider="{{ provider.id }}">
-                            {% csrf_token %}
-                            <input type="hidden" name="process" value="login">
-                            <button class="social-login-button" type="submit"><i>{{ provider.mark }}</i><span>{{ provider.label }}</span></button>
-                        </form>
+                        {% if is_native_android %}
+                            <button class="social-login-button" type="button" data-native-social-provider="{{ provider.id }}"><i>{{ provider.mark }}</i><span>{{ provider.label }}</span></button>
+                        {% else %}
+                            <form class="social-login-form" method="post" action="{{ provider.url }}">
+                                {% csrf_token %}
+                                <input type="hidden" name="process" value="login">
+                                <button class="social-login-button" type="submit"><i>{{ provider.mark }}</i><span>{{ provider.label }}</span></button>
+                            </form>
+                        {% endif %}
                     {% else %}
                         <button class="social-login-button" type="button" disabled title="Integração aguardando as credenciais do provedor"><i>{{ provider.mark }}</i><span>{{ provider.label }}</span></button>
                     {% endif %}
