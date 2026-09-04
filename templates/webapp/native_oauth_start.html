@@ -13,7 +13,7 @@
             {% csrf_token %}
             <input type="hidden" name="process" value="login">
             <input type="hidden" name="next" value="{{ next_url }}">
-            <button class="button button--ink" type="submit">Continuar com {{ provider_label }}</button>
+            <button class="button button--ink" type="submit" data-ready-label="Continuar com {{ provider_label }}">Continuar com {{ provider_label }}</button>
         </form>
     </section>
 </main>

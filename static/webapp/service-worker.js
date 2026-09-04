@@ -1,6 +1,6 @@
 "use strict";
 
-const VERSION = "pulso-shell-v1";
+const VERSION = "pulso-shell-v2";
 const OFFLINE_URL = "/static/webapp/offline.html";
 const PRECACHE = [
   OFFLINE_URL,

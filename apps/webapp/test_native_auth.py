@@ -1,5 +1,7 @@
+from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
 from django.test import TestCase, override_settings
@@ -47,6 +49,7 @@ class NativeAuthTests(TestCase):
         self.assertContains(response, "/accounts/github/login/")
         self.assertContains(response, "/native-auth/complete/")
         self.assert_no_store_private(response)
+        self.assertIn("Cookie", response.get("Vary", ""))
 
         invalid = self.client.get("/native-auth/start/github/", {"challenge": "bad"})
         self.assertEqual(invalid.status_code, 302)
@@ -55,6 +58,38 @@ class NativeAuthTests(TestCase):
         disabled = self.client.get("/native-auth/start/google/", {"challenge": self.challenge})
         self.assertEqual(disabled.status_code, 302)
         self.assertEqual(disabled.url, "/entrar/")
+
+    def test_android_login_never_posts_social_auth_directly_from_webview(self):
+        response = self.client.get(
+            "/entrar/",
+            HTTP_USER_AGENT="Mozilla/5.0 PULSO-Android/0.2.2",
+        )
+        html = response.content.decode("utf-8")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("no-store", response["Cache-Control"])
+        self.assertIn('data-native-social-provider="github"', html)
+        self.assertNotIn('action="/accounts/github/login/"', html)
+
+    def test_regular_browser_keeps_csrf_protected_social_post(self):
+        response = self.client.get("/entrar/", HTTP_USER_AGENT="Mozilla/5.0 Chrome/140")
+        html = response.content.decode("utf-8")
+
+        self.assertContains(response, 'action="/accounts/github/login/"')
+        self.assertIn('name="csrfmiddlewaretoken"', html)
+
+    def test_native_oauth_script_waits_for_cookie_and_user_action(self):
+        source = Path(
+            settings.BASE_DIR,
+            "static",
+            "webapp",
+            "native-oauth-start.js",
+        ).read_text(encoding="utf-8")
+
+        self.assertIn('row.startsWith("csrftoken=")', source)
+        self.assertIn("button.disabled = true", source)
+        self.assertIn("Recarregar acesso seguro", source)
+        self.assertNotIn("requestSubmit", source)
 
     def test_complete_issues_short_lived_code_only_for_authenticated_browser(self):
         handoff = "handoff-test"

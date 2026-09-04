@@ -5,6 +5,7 @@ from django.contrib.auth.decorators import login_required
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import redirect, render
 from django.urls import reverse
+from django.views.decorators.cache import never_cache
 from django.views.decorators.csrf import ensure_csrf_cookie
 
 from apps.webapp.widget_views import build_widget_summary
@@ -17,6 +18,7 @@ def landing(request):
     return render(request, "webapp/landing.html")
 
 
+@never_cache
 @ensure_csrf_cookie
 def auth_page(request, mode):
     if request.user.is_authenticated:
@@ -58,7 +60,16 @@ def auth_page(request, mode):
             "url": reverse("openid_connect_login", kwargs={"provider_id": "adobe"}),
         },
     ]
-    return render(request, "webapp/auth.html", {"mode": mode, "social_providers": providers})
+    is_native_android = "PULSO-Android/" in request.headers.get("User-Agent", "")
+    return render(
+        request,
+        "webapp/auth.html",
+        {
+            "mode": mode,
+            "social_providers": providers,
+            "is_native_android": is_native_android,
+        },
+    )
 
 
 @login_required

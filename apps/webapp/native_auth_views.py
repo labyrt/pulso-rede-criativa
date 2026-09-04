@@ -11,6 +11,7 @@ from django.core.cache import cache
 from django.http import HttpResponseRedirect
 from django.shortcuts import redirect, render
 from django.urls import reverse
+from django.utils.cache import patch_vary_headers
 from django.views.decorators.cache import never_cache
 from django.views.decorators.csrf import csrf_exempt, ensure_csrf_cookie
 from django.views.decorators.http import require_GET, require_POST
@@ -39,6 +40,7 @@ class PulsoNativeRedirect(HttpResponseRedirect):
 def _no_store(response):
     response["Cache-Control"] = "no-store, private"
     response["Pragma"] = "no-cache"
+    patch_vary_headers(response, ("Cookie",))
     return response
 
 
