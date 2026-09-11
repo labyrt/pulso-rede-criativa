@@ -7,18 +7,18 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 
 from apps.accounts.models import Block, User
-from apps.social.models import Notification
 
 from .models import CallSession, Conversation, Message
 from .serializers import CallSessionSerializer, ConversationSerializer, MessageSerializer
-
-
-def conversation_has_block(conversation, user):
-    other_ids = conversation.participants.exclude(pk=user.pk).values_list("pk", flat=True)
-    return Block.objects.filter(
-        Q(blocker=user, blocked_id__in=other_ids)
-        | Q(blocker_id__in=other_ids, blocked=user)
-    ).exists()
+from .services import (
+    CallStateError,
+    ChatPolicyError,
+    conversation_has_block,
+    create_call,
+    create_message,
+    expire_stale_calls,
+    transition_call_status,
+)
 
 
 class ConversationViewSet(viewsets.ModelViewSet):
@@ -99,30 +99,33 @@ class ConversationViewSet(viewsets.ModelViewSet):
                 response["X-Oldest-Message"] = str(chunk[0].pk)
             return response
 
-        if conversation_has_block(conversation, request.user):
-            return Response(
-                {"detail": "Não é possível enviar mensagens enquanto houver um bloqueio."},
-                status=status.HTTP_403_FORBIDDEN,
-            )
         serializer = MessageSerializer(data=request.data, context={"request": request})
         serializer.is_valid(raise_exception=True)
-        message = serializer.save(conversation=conversation, sender=request.user)
-        conversation.save(update_fields=["updated_at"])
-        for recipient in conversation.participants.exclude(pk=request.user.pk):
-            Notification.objects.create(recipient=recipient, actor=request.user, kind=Notification.Kind.MESSAGE)
+        try:
+            message = create_message(
+                conversation_id=conversation.pk,
+                sender_id=request.user.pk,
+                body=serializer.validated_data["body"],
+            )
+        except ChatPolicyError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_403_FORBIDDEN)
         return Response(MessageSerializer(message, context={"request": request}).data, status=status.HTTP_201_CREATED)
 
     @action(detail=True, methods=["post"])
     def calls(self, request, pk=None):
         conversation = self.get_object()
-        if conversation_has_block(conversation, request.user):
-            return Response(
-                {"detail": "Não é possível iniciar chamadas enquanto houver um bloqueio."},
-                status=status.HTTP_403_FORBIDDEN,
-            )
         serializer = CallSessionSerializer(data={**request.data, "conversation": conversation.pk})
         serializer.is_valid(raise_exception=True)
-        call = serializer.save(conversation=conversation, caller=request.user)
+        try:
+            call = create_call(
+                conversation_id=conversation.pk,
+                caller_id=request.user.pk,
+                kind=serializer.validated_data["kind"],
+            )
+        except ChatPolicyError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_403_FORBIDDEN)
+        except CallStateError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_409_CONFLICT)
         return Response(CallSessionSerializer(call, context={"request": request}).data, status=status.HTTP_201_CREATED)
 
 
@@ -130,26 +133,39 @@ class CallViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = CallSessionSerializer
 
     def get_queryset(self):
-        return CallSession.objects.filter(conversation__participants=self.request.user).select_related("caller", "caller__profile")
+        queryset = CallSession.objects.filter(conversation__participants=self.request.user)
+        expire_stale_calls(queryset)
+        return queryset.select_related("caller", "caller__profile").distinct()
 
     @action(detail=True, methods=["post"])
     def status(self, request, pk=None):
         call = self.get_object()
         new_status = request.data.get("status")
-        allowed = {choice for choice, _ in CallSession.Status.choices}
-        if new_status not in allowed:
+        client_allowed = {
+            CallSession.Status.ACTIVE,
+            CallSession.Status.ENDED,
+            CallSession.Status.DECLINED,
+        }
+        if new_status not in client_allowed:
             return Response({"detail": "Status inválido."}, status=status.HTTP_400_BAD_REQUEST)
-        call.status = new_status
-        if new_status in {CallSession.Status.ENDED, CallSession.Status.DECLINED, CallSession.Status.MISSED}:
-            call.ended_at = timezone.now()
-        call.save(update_fields=["status", "ended_at"])
+        try:
+            call = transition_call_status(call_id=call.pk, user_id=request.user.pk, new_status=new_status)
+        except ChatPolicyError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_403_FORBIDDEN)
+        except CallStateError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_409_CONFLICT)
         return Response(CallSessionSerializer(call, context={"request": request}).data)
 
 
 class IceServerView(viewsets.ViewSet):
     def list(self, request):
         servers = [{"urls": settings.WEBRTC_STUN_URL}]
-        if settings.WEBRTC_TURN_URL:
+        turn_ready = bool(
+            settings.WEBRTC_TURN_URL
+            and settings.WEBRTC_TURN_USERNAME
+            and settings.WEBRTC_TURN_CREDENTIAL
+        )
+        if turn_ready:
             servers.append(
                 {
                     "urls": settings.WEBRTC_TURN_URL,
@@ -157,4 +173,4 @@ class IceServerView(viewsets.ViewSet):
                     "credential": settings.WEBRTC_TURN_CREDENTIAL,
                 }
             )
-        return Response({"iceServers": servers})
+        return Response({"iceServers": servers, "turnAvailable": turn_ready})
