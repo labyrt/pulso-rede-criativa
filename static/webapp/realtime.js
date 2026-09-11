@@ -18,6 +18,9 @@
     incoming: null,
     pendingSignals: [],
     pendingCandidates: [],
+    ringTimer: null,
+    ringTimeoutSeconds: 45,
+    turnAvailable: false,
   };
 
   const escapeHtml = (value = "") => String(value).replace(/[&<>'"]/g, char => ({
@@ -143,6 +146,7 @@
     const scheme = location.protocol === "https:" ? "wss" : "ws";
     const socket = new WebSocket(`${scheme}://${location.host}/ws/events/`);
     live.eventsSocket = socket;
+    socket.onopen = () => clearTimeout(live.reconnectTimer);
     socket.onmessage = event => {
       try { handleLiveEvent(JSON.parse(event.data)); } catch (_) { /* ignore malformed event */ }
     };
@@ -264,11 +268,38 @@
       return;
     }
 
-    if (data.type === "call_signal") handleCallSignal(data);
+    if (data.type === "call_signal") {
+      handleCallSignal(data);
+      return;
+    }
+
+    if (data.type === "call_status") handleCallStatus(data);
   }
 
   function callModal() { return document.querySelector("#call-modal"); }
   function setCallStatus(message) { const status = document.querySelector("#call-status"); if (status) status.textContent = message; }
+
+  function clearRingTimer() {
+    if (live.ringTimer) clearTimeout(live.ringTimer);
+    live.ringTimer = null;
+  }
+
+  function scheduleRingTimeout() {
+    clearRingTimer();
+    const callId = live.callId;
+    if (!callId) return;
+    live.ringTimer = setTimeout(async () => {
+      if (!live.callId || Number(live.callId) !== Number(callId)) return;
+      if (live.peer?.connectionState === "connected") return;
+      sendCallSignal({ hangup: true, reason: "missed" });
+      await requestJson(`/api/v1/chat/calls/${callId}/status/`, {
+        method: "POST",
+        body: JSON.stringify({ status: "missed" }),
+      }).catch(() => null);
+      cleanupCall(true);
+      toast("A ligação não foi atendida.");
+    }, (Math.max(15, Number(live.ringTimeoutSeconds) || 45) * 1000) + 750);
+  }
 
   async function openLocalMedia(kind) {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: kind === "video" });
@@ -283,7 +314,10 @@
 
   function createPeer(kind) {
     return requestJson("/api/v1/chat/ice-servers/").then(config => {
-      const peer = new RTCPeerConnection(config);
+      live.turnAvailable = Boolean(config.turnAvailable);
+      live.ringTimeoutSeconds = Math.max(15, Number(config.ringTimeoutSeconds) || 45);
+      if (!live.turnAvailable) console.warn("PULSO calls are running without TURN relay support.");
+      const peer = new RTCPeerConnection({ iceServers: config.iceServers || [] });
       live.peer = peer;
       live.localStream?.getTracks().forEach(track => peer.addTrack(track, live.localStream));
       peer.ontrack = event => {
@@ -294,8 +328,15 @@
         if (event.candidate) sendCallSignal({ candidate: event.candidate.toJSON?.() || event.candidate, kind });
       };
       peer.onconnectionstatechange = () => {
-        if (peer.connectionState === "connected") setCallStatus("Na chamada");
-        if (["failed", "closed"].includes(peer.connectionState)) cleanupCall(true);
+        if (peer.connectionState === "connected") {
+          clearRingTimer();
+          setCallStatus("Na chamada");
+        }
+        if (peer.connectionState === "disconnected") setCallStatus("Reconectando...");
+        if (peer.connectionState === "failed") {
+          toast(live.turnAvailable ? "A conexão da chamada falhou." : "A rede não conseguiu estabelecer a chamada. O relay TURN não está disponível.");
+          endLiveCall().catch(() => cleanupCall(true));
+        }
       };
       return peer;
     });
@@ -326,7 +367,15 @@
       const offer = await peer.createOffer();
       await peer.setLocalDescription(offer);
       if (!sendCallSignal({ description: peer.localDescription, kind })) throw new Error("A sinalização da chamada foi interrompida.");
+      scheduleRingTimeout();
     } catch (error) {
+      const callId = live.callId;
+      if (callId) {
+        await requestJson(`/api/v1/chat/calls/${callId}/status/`, {
+          method: "POST",
+          body: JSON.stringify({ status: "ended" }),
+        }).catch(() => null);
+      }
       toast(error.name === "NotAllowedError" ? "Permita câmera e microfone para ligar." : error.message);
       cleanupCall(true);
     }
@@ -377,8 +426,8 @@
     const incoming = live.incoming;
     document.querySelector("#incoming-call-card")?.remove();
     if (incoming?.call_id) {
-      await requestJson(`/api/v1/chat/calls/${incoming.call_id}/status/`, { method: "POST", body: JSON.stringify({ status: "declined" }) }).catch(() => null);
       sendCallSignal({ hangup: true, reason: "declined" });
+      await requestJson(`/api/v1/chat/calls/${incoming.call_id}/status/`, { method: "POST", body: JSON.stringify({ status: "declined" }) }).catch(() => null);
     }
     cleanupCall(true);
   }
@@ -386,7 +435,9 @@
   async function applyCallSignal(signal) {
     if (signal.hangup) {
       cleanupCall(true);
-      toast(signal.reason === "declined" ? "A ligação foi recusada." : "A ligação terminou.");
+      if (signal.reason === "declined") toast("A ligação foi recusada.");
+      else if (signal.reason === "missed") toast("A ligação não foi atendida.");
+      else toast("A ligação terminou.");
       return;
     }
     if (!live.peer) {
@@ -419,7 +470,22 @@
     applyCallSignal(signal).catch(() => toast("Não foi possível completar a chamada."));
   }
 
+  function handleCallStatus(data) {
+    if (!live.callId || Number(data.call_id) !== Number(live.callId)) return;
+    if (data.status === "active") {
+      clearRingTimer();
+      setCallStatus(live.peer?.connectionState === "connected" ? "Na chamada" : "Conectando...");
+      return;
+    }
+    if (!["ended", "declined", "missed"].includes(data.status)) return;
+    const statusValue = data.status;
+    cleanupCall(true);
+    if (statusValue === "declined") toast("A ligação foi recusada.");
+    if (statusValue === "missed") toast("A ligação não foi atendida.");
+  }
+
   function cleanupCall(closeModal = true) {
+    clearRingTimer();
     live.localStream?.getTracks().forEach(track => track.stop());
     live.peer?.close();
     live.localStream = null;
@@ -483,7 +549,10 @@
     }
   }, true);
 
-  window.addEventListener("pagehide", () => clearTimeout(live.reconnectTimer));
+  window.addEventListener("pagehide", () => {
+    clearTimeout(live.reconnectTimer);
+    clearRingTimer();
+  });
 
   ensureMobileLiveControls();
   ensureMobilePeopleSection();
