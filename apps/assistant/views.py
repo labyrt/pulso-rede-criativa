@@ -24,7 +24,7 @@ def local_editor_fallback(draft):
     text = str(draft or "").strip()
     text = re.sub(r"[ \t]+", " ", text)
     text = re.sub(r"\n{3,}", "\n\n", text)
-    return text[:500].rstrip()
+    return text[:800].rstrip()
 
 
 def build_caption_prompt(*, draft, category, tone, mode):
@@ -84,7 +84,7 @@ class CaptionAssistantView(APIView):
                         mode=mode,
                     ),
                 )
-                suggestion = (result.text or "").strip()[:500]
+                suggestion = (result.text or "").strip()[:800]
                 if suggestion and not looks_canned(suggestion):
                     return Response(
                         {
