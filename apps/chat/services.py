@@ -60,18 +60,29 @@ def create_message(*, conversation_id, sender_id, body):
     return message
 
 
-def _ring_timeout_seconds():
+def ring_timeout_seconds():
     try:
         return max(15, int(getattr(settings, "WEBRTC_RING_TIMEOUT_SECONDS", 45)))
     except (TypeError, ValueError):
         return 45
 
 
+def _publish_call_status(call, status_value):
+    participant_ids = list(call.conversation.participants.values_list("pk", flat=True))
+    payload = {
+        "call_id": call.pk,
+        "conversation_id": call.conversation_id,
+        "status": status_value,
+    }
+    for participant_id in participant_ids:
+        publish_user_event(participant_id, "call_status", payload)
+
+
 def expire_stale_calls(queryset=None):
     """Move abandoned ringing calls to MISSED so they cannot remain live forever."""
     base = queryset if queryset is not None else CallSession.objects.all()
     now = timezone.now()
-    cutoff = now - timedelta(seconds=_ring_timeout_seconds())
+    cutoff = now - timedelta(seconds=ring_timeout_seconds())
     stale = list(
         base.filter(status=CallSession.Status.RINGING, started_at__lt=cutoff)
         .select_related("conversation")
@@ -86,13 +97,7 @@ def expire_stale_calls(queryset=None):
         ended_at=now,
     )
     for call in stale:
-        recipient_ids = [participant.pk for participant in call.conversation.participants.all()]
-        for recipient_id in recipient_ids:
-            publish_user_event(
-                recipient_id,
-                "call_status",
-                {"call_id": call.pk, "conversation_id": call.conversation_id, "status": CallSession.Status.MISSED},
-            )
+        _publish_call_status(call, CallSession.Status.MISSED)
     return len(stale_ids)
 
 
@@ -127,7 +132,7 @@ def transition_call_status(*, call_id, user_id, new_status):
         raise ChatPolicyError("Chamada indisponível.")
 
     expire_stale_calls(CallSession.objects.filter(pk=call.pk))
-    call.refresh_from_db(fields=["status", "ended_at"])
+    call.refresh_from_db(fields=["status", "ended_at", "started_at"])
 
     if call.status == new_status:
         return call
@@ -137,6 +142,7 @@ def transition_call_status(*, call_id, user_id, new_status):
             CallSession.Status.ACTIVE,
             CallSession.Status.DECLINED,
             CallSession.Status.ENDED,
+            CallSession.Status.MISSED,
         },
         CallSession.Status.ACTIVE: {CallSession.Status.ENDED},
         CallSession.Status.ENDED: set(),
@@ -149,15 +155,16 @@ def transition_call_status(*, call_id, user_id, new_status):
     is_caller = call.caller_id == user_id
     if is_caller and new_status in {CallSession.Status.ACTIVE, CallSession.Status.DECLINED}:
         raise CallStateError("Somente quem recebe a chamada pode atender ou recusar.")
+    if new_status == CallSession.Status.MISSED:
+        if not is_caller:
+            raise CallStateError("Somente quem iniciou a chamada pode marcar ausência de resposta.")
+        if timezone.now() < call.started_at + timedelta(seconds=ring_timeout_seconds()):
+            raise CallStateError("A chamada ainda está dentro do tempo de resposta.")
 
     call.status = new_status
     if new_status in {CallSession.Status.ENDED, CallSession.Status.DECLINED, CallSession.Status.MISSED}:
         call.ended_at = timezone.now()
     call.save(update_fields=["status", "ended_at"])
 
-    participant_ids = list(call.conversation.participants.values_list("pk", flat=True))
-    payload = {"call_id": call.pk, "conversation_id": call.conversation_id, "status": call.status}
-    transaction.on_commit(
-        lambda: [publish_user_event(participant_id, "call_status", payload) for participant_id in participant_ids]
-    )
+    transaction.on_commit(lambda: _publish_call_status(call, call.status))
     return call
