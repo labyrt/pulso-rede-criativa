@@ -248,11 +248,12 @@ else:
 
 FIELD_ENCRYPTION_KEY = os.getenv("FIELD_ENCRYPTION_KEY", "")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash-lite")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
 WEBRTC_STUN_URL = os.getenv("WEBRTC_STUN_URL", "stun:stun.l.google.com:19302")
 WEBRTC_TURN_URL = os.getenv("WEBRTC_TURN_URL", "")
 WEBRTC_TURN_USERNAME = os.getenv("WEBRTC_TURN_USERNAME", "")
 WEBRTC_TURN_CREDENTIAL = os.getenv("WEBRTC_TURN_CREDENTIAL", "")
+WEBRTC_RING_TIMEOUT_SECONDS = int(os.getenv("WEBRTC_RING_TIMEOUT_SECONDS", "45"))
 
 # Production hardening. These flags activate automatically when DEBUG=False.
 SESSION_COOKIE_HTTPONLY = True

@@ -59,6 +59,7 @@ class PwaDeliveryTests(TestCase):
             "offline.html",
             "pwa.js",
             "realtime.js",
+            "ai-editor.js",
             "pwa-realtime.css",
             "icons/pulso-192.png",
             "icons/pulso-512.png",
@@ -74,7 +75,23 @@ class PwaDeliveryTests(TestCase):
         self.assertIn('rel="manifest" href="/manifest.webmanifest"', html)
         self.assertIn("webapp/pwa.js", html)
         self.assertIn("webapp/realtime.js", html)
+        self.assertIn("webapp/ai-editor.js", html)
         self.assertIn("webapp/pwa-realtime.css", html)
+
+    def test_realtime_client_has_server_status_and_timeout_recovery(self):
+        source = Path(settings.BASE_DIR, "static", "webapp", "realtime.js").read_text(encoding="utf-8")
+        self.assertIn('data.type === "call_status"', source)
+        self.assertIn('status: "missed"', source)
+        self.assertIn("turnAvailable", source)
+        self.assertIn("ringTimeoutSeconds", source)
+        self.assertIn("endLiveCall().catch", source)
+
+    def test_ai_editor_intercepts_legacy_caption_flow_and_reports_degraded_mode(self):
+        source = Path(settings.BASE_DIR, "static", "webapp", "ai-editor.js").read_text(encoding="utf-8")
+        self.assertIn('[data-action="ai-caption"]', source)
+        self.assertIn("stopImmediatePropagation", source)
+        self.assertIn('mode: "natural"', source)
+        self.assertIn("IA generativa está indisponível", source)
 
 
 class LiveProductSignalsTests(TestCase):

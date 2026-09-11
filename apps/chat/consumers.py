@@ -3,12 +3,9 @@ from time import monotonic
 
 from channels.db import database_sync_to_async
 from channels.generic.websocket import AsyncJsonWebsocketConsumer
-from django.utils import timezone
 
-from apps.accounts.models import User
-from apps.social.models import Notification
-
-from .models import Conversation, Message
+from .models import Conversation
+from .services import ChatPolicyError, create_message
 
 
 class ConversationConsumer(AsyncJsonWebsocketConsumer):
@@ -41,23 +38,19 @@ class ConversationConsumer(AsyncJsonWebsocketConsumer):
             if not body or len(body) > 2000:
                 await self.send_json({"type": "error", "message": "Mensagem inválida."})
                 return
-            message = await self._save_message(self.scope["user"].id, body)
+            try:
+                message = await self._save_message(self.scope["user"].id, body)
+            except ChatPolicyError as exc:
+                await self.send_json({"type": "error", "message": str(exc)})
+                return
             await self.channel_layer.group_send(
                 self.room_group_name,
                 {"type": "chat.message", "message": message},
             )
         elif event_type == "signal":
-            signal = content.get("signal", {})
-            if not isinstance(signal, dict) or len(str(signal)) > 50000:
-                return
-            await self.channel_layer.group_send(
-                self.room_group_name,
-                {
-                    "type": "rtc.signal",
-                    "sender_id": self.scope["user"].id,
-                    "signal": signal,
-                },
-            )
+            # WebRTC signaling is intentionally centralized in /ws/events/.
+            # Keeping a second signaling path here caused call/session races.
+            await self.send_json({"type": "error", "message": "Atualize a página antes de iniciar uma ligação."})
         elif event_type == "typing":
             await self.channel_layer.group_send(
                 self.room_group_name,
@@ -71,10 +64,6 @@ class ConversationConsumer(AsyncJsonWebsocketConsumer):
     async def chat_message(self, event):
         await self.send_json({"type": "message", "message": event["message"]})
 
-    async def rtc_signal(self, event):
-        if event["sender_id"] != self.scope["user"].id:
-            await self.send_json({"type": "signal", "signal": event["signal"]})
-
     async def typing_event(self, event):
         if event["sender_id"] != self.scope["user"].id:
             await self.send_json({"type": "typing", "active": event["active"]})
@@ -85,19 +74,23 @@ class ConversationConsumer(AsyncJsonWebsocketConsumer):
 
     @database_sync_to_async
     def _save_message(self, user_id, body):
-        conversation = Conversation.objects.get(pk=self.conversation_id)
-        sender = User.objects.select_related("profile").get(pk=user_id)
-        message = Message(conversation=conversation, sender=sender)
-        message.set_body(body)
-        message.save()
-        Conversation.objects.filter(pk=conversation.pk).update(updated_at=timezone.now())
-        recipients = conversation.participants.exclude(pk=user_id).only("pk")
-        Notification.objects.bulk_create(
-            [Notification(recipient=recipient, actor=sender, kind=Notification.Kind.MESSAGE) for recipient in recipients]
+        message = create_message(
+            conversation_id=self.conversation_id,
+            sender_id=user_id,
+            body=body,
         )
+        sender = message.sender
+        # "body" remains during the frontend compatibility window; "content"
+        # is the canonical field shared with the REST serializer.
         return {
             "id": message.pk,
+            "content": message.body,
             "body": message.body,
-            "sender": {"id": sender.pk, "username": sender.username, "display_name": sender.profile.name},
+            "sender": {
+                "id": sender.pk,
+                "username": sender.username,
+                "display_name": sender.profile.name,
+            },
             "created_at": message.created_at.isoformat(),
+            "read_at": None,
         }

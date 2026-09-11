@@ -29,13 +29,7 @@ def _github_callback_url():
 
 
 def github_oauth_probe(providers):
-    """Validate the configured GitHub OAuth app without exposing credentials.
-
-    A deliberately invalid authorization code is exchanged. With a valid
-    client_id/client_secret pair GitHub responds with ``bad_verification_code``.
-    Credential or redirect configuration errors remain distinguishable without
-    logging secrets, real authorization codes, or access tokens.
-    """
+    """Validate the configured GitHub OAuth app without exposing credentials."""
     github = providers.get("github") or {}
     apps = github.get("APPS") or []
     if not apps:
@@ -70,6 +64,14 @@ def github_oauth_probe(providers):
     return f"unexpected_http_{response.status_code}"
 
 
+def turn_ready():
+    return bool(
+        settings.WEBRTC_TURN_URL
+        and settings.WEBRTC_TURN_USERNAME
+        and settings.WEBRTC_TURN_CREDENTIAL
+    )
+
+
 class Command(BaseCommand):
     help = "Print a non-secret readiness summary for production integrations."
 
@@ -85,9 +87,23 @@ class Command(BaseCommand):
             "adobe_oauth": "openid_connect" in providers,
             "cloudinary": bool(os.getenv("CLOUDINARY_URL", "").strip()),
             "field_encryption": bool(settings.FIELD_ENCRYPTION_KEY),
-            "gemini": bool(settings.GEMINI_API_KEY),
-            "turn": bool(settings.WEBRTC_TURN_URL),
+            "gemini": bool(settings.GEMINI_API_KEY and settings.GEMINI_MODEL),
+            "turn": turn_ready(),
         }
         summary = " ".join(f"{key}={int(value)}" for key, value in checks.items())
         self.stdout.write(f"PULSO_INTEGRATION_STATUS {summary}")
         self.stdout.write(f"PULSO_GITHUB_OAUTH_PROBE result={github_oauth_probe(providers)}")
+        self.stdout.write(f"PULSO_AI_MODEL model={settings.GEMINI_MODEL}")
+
+        if not checks["gemini"]:
+            self.stderr.write(
+                self.style.WARNING(
+                    "PULSO_DEGRADED ai=1 reason=GEMINI_API_KEY_missing caption assistant will preserve drafts without generative rewriting"
+                )
+            )
+        if not checks["turn"]:
+            self.stderr.write(
+                self.style.WARNING(
+                    "PULSO_DEGRADED calls=1 reason=TURN_incomplete WebRTC may fail on restrictive NAT/mobile networks"
+                )
+            )

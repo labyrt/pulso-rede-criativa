@@ -9,6 +9,7 @@ from apps.accounts.models import Block
 from apps.common.realtime import user_group_name
 
 from .models import CallSession
+from .services import expire_stale_calls
 
 
 class UserEventsConsumer(AsyncJsonWebsocketConsumer):
@@ -59,8 +60,6 @@ class UserEventsConsumer(AsyncJsonWebsocketConsumer):
         description = signal.get("description") if isinstance(signal.get("description"), dict) else {}
         is_initial_offer = description.get("type") == "offer"
 
-        # Ring exactly when a real WebRTC offer exists. Sending this event immediately
-        # before the offer also guarantees the receiver binds the correct call_id first.
         if call_context["sender_is_caller"] and is_initial_offer:
             incoming_payload = {
                 "call_id": call_context["call_id"],
@@ -92,6 +91,7 @@ class UserEventsConsumer(AsyncJsonWebsocketConsumer):
 
     @database_sync_to_async
     def _call_context(self, conversation_id, call_id, user_id):
+        expire_stale_calls(CallSession.objects.filter(pk=call_id))
         call = (
             CallSession.objects.select_related("caller", "caller__profile", "conversation")
             .filter(
