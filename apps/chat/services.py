@@ -88,17 +88,22 @@ def expire_stale_calls(queryset=None):
         .select_related("conversation")
         .prefetch_related("conversation__participants")
     )
-    if not stale:
-        return 0
-
-    stale_ids = [call.pk for call in stale]
-    CallSession.objects.filter(pk__in=stale_ids, status=CallSession.Status.RINGING).update(
-        status=CallSession.Status.MISSED,
-        ended_at=now,
-    )
+    expired = 0
     for call in stale:
-        _publish_call_status(call, CallSession.Status.MISSED)
-    return len(stale_ids)
+        updated = CallSession.objects.filter(
+            pk=call.pk,
+            status=CallSession.Status.RINGING,
+        ).update(
+            status=CallSession.Status.MISSED,
+            ended_at=now,
+        )
+        if not updated:
+            continue
+        expired += 1
+        transaction.on_commit(
+            lambda call=call: _publish_call_status(call, CallSession.Status.MISSED)
+        )
+    return expired
 
 
 @transaction.atomic
