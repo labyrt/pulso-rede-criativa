@@ -13,10 +13,10 @@ from .serializers import CallSessionSerializer, ConversationSerializer, MessageS
 from .services import (
     CallStateError,
     ChatPolicyError,
-    conversation_has_block,
     create_call,
     create_message,
     expire_stale_calls,
+    ring_timeout_seconds,
     transition_call_status,
 )
 
@@ -145,6 +145,7 @@ class CallViewSet(viewsets.ReadOnlyModelViewSet):
             CallSession.Status.ACTIVE,
             CallSession.Status.ENDED,
             CallSession.Status.DECLINED,
+            CallSession.Status.MISSED,
         }
         if new_status not in client_allowed:
             return Response({"detail": "Status inválido."}, status=status.HTTP_400_BAD_REQUEST)
@@ -173,4 +174,10 @@ class IceServerView(viewsets.ViewSet):
                     "credential": settings.WEBRTC_TURN_CREDENTIAL,
                 }
             )
-        return Response({"iceServers": servers, "turnAvailable": turn_ready})
+        return Response(
+            {
+                "iceServers": servers,
+                "turnAvailable": turn_ready,
+                "ringTimeoutSeconds": ring_timeout_seconds(),
+            }
+        )
